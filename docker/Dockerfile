@@ -1,14 +1,19 @@
-# ARGOS Dockerfile - Public version (generic)
 FROM python:3.13-slim
 
-WORKDIR /home/argos/argos-core
+WORKDIR /home/darkangel/.argos/argos-core
 
-RUN apt-get update && apt-get install -y curl git rsync openssh-client && rm -rf /var/lib/apt/lists/*
+# Dependente sistem
+RUN apt-get update && apt-get install -y \
+    curl git openssh-client \
+    && rm -rf /var/lib/apt/lists/*
 
-COPY argos-core/ ./
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Python packages
+COPY argos-core/requirements.txt /tmp/requirements.txt
+RUN pip install --no-cache-dir -r /tmp/requirements.txt
 
-EXPOSE 8000
+# User non-root
+RUN useradd -m -u 1000 argos
+USER argos
+WORKDIR /home/darkangel/.argos/argos-core
 
-CMD ["python", "-m", "uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["python3", "-m", "uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]
