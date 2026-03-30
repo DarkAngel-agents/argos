@@ -1,22 +1,20 @@
 #!/usr/bin/env bash
-# ARGOS Public Setup Script - Template
-# Completează argos-setup.yaml mai întâi
+# ARGOS Public Setup Script - Template v1.0
+# Completeaza argos-setup.yaml mai intai, apoi ruleaza acest script.
 
 echo "=== ARGOS Public Setup ==="
 
-# Verificări de bază
 if [ "$(id -u)" -eq 0 ]; then
-    echo "Nu rula ca root. Folosește user normal."
+    echo "Nu rula ca root. Foloseste user normal."
     exit 1
 fi
 
-echo "→ Creare directoare..."
 mkdir -p ~/.argos/argos-core ~/.argos/docker ~/.argos/config ~/.argos/backups/db ~/.ssh
 
-echo "→ Copiere fișiere..."
-# Aici se vor copia fișierele din repo (Dockerfile, swarm-stack.yml etc.)
+echo "→ Copiere fisiere din repo..."
+# Aici se vor copia fisierele din repo-ul public
 
-echo "→ Completează argos-setup.yaml mai întâi!"
-echo "Apoi rulează: bash ~/.argos/argos-core/setup.sh"
+echo "→ Configurare initiala terminata."
+echo "Completeaza ~/.argos/config/argos-setup.yaml si ruleaza din nou setup.sh"
 
 echo "=== SETUP TEMPLATE GATA ==="
