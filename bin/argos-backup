@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+BASE="http://localhost:8000"
+MODULES=("api/chat.py" "api/main.py" "api/executor.py" "api/vms.py" "api/jobs.py" "api/backup.py" "api/compress.py" "api/local_executor.py" "api/iso_builder.py" "api/archives.py" "api/nanite.py" "api/code_runner.py" "ui/index.html" "config/system_prompt.txt" "nixos/configuration.nix")
+echo "[ARGOS-BACKUP] Backup LTS ${#MODULES[@]} module..."
+OK=0; FAIL=0
+for m in "${MODULES[@]}"; do
+    curl -s -X POST "$BASE/api/backup/$m" >/dev/null
+    r=$(curl -s -X POST "$BASE/api/backup-mark-lts" -H "Content-Type: application/json" -d "{\"module_name\":\"$m\"}")
+    echo "$r" | grep -q '"ok"' && { echo "  ✓ $m"; OK=$((OK+1)); } || { echo "  ✗ $m"; FAIL=$((FAIL+1)); }
+done
+echo "[ARGOS-BACKUP] Done: $OK ok, $FAIL fail"

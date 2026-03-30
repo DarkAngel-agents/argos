@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+MSG="${1:-Argos update $(date '+%Y-%m-%d %H:%M')}"
+cd ~/.argos
+git add .
+git commit -m "$MSG" 2>/dev/null || echo "[ARGOS-PUSH] Nimic nou"
+git push
+echo "[ARGOS-PUSH] Done"

@@ -1,0 +1,12 @@
+# Generated from api/*.py imports
+# Python 3.13 / NixOS - versions as installed on beasty
+# Generated: 2025-07-15
+
+anthropic==0.75.0
+asyncpg==0.30.0
+asyncssh==2.21.1
+fastapi==0.116.1
+httpx==0.28.1
+pydantic==2.11.7
+python-dotenv==1.1.1
+uvicorn==0.35.0
