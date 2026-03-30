@@ -2,6 +2,6 @@
 username: your_username
 language: en
 claude_token: sk-ant-...
-grok_token: xai-...          # optional & recomended
+grok_token: xai-...          # optional & recommended 
 db_password: your_strong_password
 hostname: your_hostname
