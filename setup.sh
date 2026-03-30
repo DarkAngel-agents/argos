@@ -1,20 +1,20 @@
 #!/usr/bin/env bash
 # ARGOS Public Setup Script - Template v1.0
-# Completeaza argos-setup.yaml mai intai, apoi ruleaza acest script.
+# First complete argos-setup.yaml, then run this script.
 
 echo "=== ARGOS Public Setup ==="
 
 if [ "$(id -u)" -eq 0 ]; then
-    echo "Nu rula ca root. Foloseste user normal."
+    echo "Do not run as root. Use normal user."
     exit 1
 fi
 
 mkdir -p ~/.argos/argos-core ~/.argos/docker ~/.argos/config ~/.argos/backups/db ~/.ssh
 
-echo "→ Copiere fisiere din repo..."
-# Aici se vor copia fisierele din repo-ul public
+echo "→ Copying files from public repo..."
 
-echo "→ Configurare initiala terminata."
-echo "Completeaza ~/.argos/config/argos-setup.yaml si ruleaza din nou setup.sh"
+# Files will be copied here from the public repo
 
-echo "=== SETUP TEMPLATE GATA ==="
+echo "→ Initial configuration completed."
+echo "Complete ~/.argos/config/argos-setup.yaml and run setup.sh again."
+echo "=== SETUP TEMPLATE READY ==="
