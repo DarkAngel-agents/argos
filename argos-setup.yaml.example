@@ -1,0 +1,7 @@
+# ARGOS Setup Configuration - PUBLIC TEMPLATE
+username: your_username
+language: en
+claude_token: sk-ant-...
+grok_token: xai-...          # optional
+db_password: your_strong_password
+hostname: your_hostname

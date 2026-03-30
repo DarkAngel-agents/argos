@@ -1,0 +1,25 @@
+# ARGOS Swarm Stack - PUBLIC TEMPLATE
+# Inlocuieste placeholder-urile cu valorile tale
+
+services:
+  argos:
+    image: <YOUR_IP>:5000/argos:latest
+    deploy:
+      replicas: 2
+      restart_policy:
+        condition: any
+        delay: 15s
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 1G
+    working_dir: /home/argos/argos-core
+    env_file:
+      - /root/.argos.env
+    volumes:
+      - /home/argos/.argos/argos-core:/home/argos/argos-core
+      - /home/argos/.argos/backups:/backups
+      - /home/argos/.ssh:/home/argos/.ssh:ro
+    ports:
+      - "666:8000"
