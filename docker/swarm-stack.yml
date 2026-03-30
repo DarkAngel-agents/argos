@@ -1,6 +1,6 @@
 services:
   argos:
-    image: 11.11.11.111:5000/argos:latest
+    image: YOUR_REGISTRY_IP:5000/argos:latest
     deploy:
       replicas: 2
       restart_policy:
@@ -10,14 +10,13 @@ services:
       update_config:
         order: start-first
         failure_action: rollback
-
-    working_dir: /home/darkangel/.argos/argos-core
+    working_dir: /home/YOUR_USERNAME/.argos/argos-core
     env_file:
       - /root/.argos.env
     volumes:
-      - /home/darkangel/.argos/argos-core:/home/darkangel/.argos/argos-core
-      - /home/darkangel/.argos/backups:/backups
-      - /home/darkangel/.ssh:/home/argos/.ssh:ro
+      - /home/YOUR_USERNAME/.argos/argos-core:/home/YOUR_USERNAME/.argos/argos-core
+      - /home/YOUR_USERNAME/.argos/backups:/backups
+      - /home/YOUR_USERNAME/.ssh:/home/argos/.ssh:ro
     ports:
       - "666:8000"
     healthcheck:

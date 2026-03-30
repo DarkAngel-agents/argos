@@ -60,3 +60,15 @@ See [ROADMAP.md](ROADMAP.md) for what's coming.
 ---
 
 *Made with love, spite, and pure determination.*
+
+---
+
+## Development Notes
+
+This release was developed and tested on a private network (11.11.11.x range) with username `darkangel`.
+Some paths and IPs are hardcoded in templates — replace with your own before deploying.
+
+**v1 = working, tested, real infrastructure. Not sanitized for generic use yet.**
+**v2 will have fully dynamic configuration with no hardcoded values.**
+
+If you see `11.11.11.111` or `darkangel` in any file — that's a placeholder for your own values.
