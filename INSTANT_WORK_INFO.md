@@ -1,27 +1,19 @@
 # INSTANT WORK INFO - READ ME FIRST (30 March 2026)
 
-ATTENTION!
+Hey,
 
-I made a mistake and pushed a broken version to the public repo.
+Quick update on what happened yesterday.
 
-What happened:
-I tried to make the credential file (containing API keys, DB passwords, auth tokens, etc.) readable from both Beasty and Hermes.
-Hermes is the permanent Swarm leader node (the "brain" of the system).
+I was working on getting the credential sharing to work properly between the two nodes (Beasty and Hermes).
+Hermes is the permanent Swarm leader — the "brain" of the system — and it needs to have the right keys to talk to everything.
 
-During that change I broke the server. 
-Now the API is down ("All DB connections failed" + token-count returns 500).
+I broke it. The API went down for a few hours.
 
-ARGOS still works locally on my GPU (Beasty) and can be used normally, but the Swarm deployment is currently unstable.
+Good news: it's fixed now.
+The connection between machines is working correctly again.
+The system is currently being cleaned up for public release.
 
-I am actively working to fix the credential sharing logic between nodes.
-I need a little more time to find exactly what I did wrong.
-
-If anyone sees the exact cause why the server is not starting correctly, please tell me.
-
-Roadmap note:
-HERMES v2 (full leader node with proper credential sharing and failover) will be released soon with full code and documentation.
-
-Thank you for understanding.
-I will announce here when the repo is clean again.
+If you're reading this waiting to try ARGOS — it's coming.
+Made with love, spite, and pure determination.
 
 DarkAngel
