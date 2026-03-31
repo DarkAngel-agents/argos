@@ -32,7 +32,7 @@ async def detect_modules(text: str, conn) -> list:
     """Detecteaza ce module sunt relevante pe baza textului"""
     text_lower = text.lower()
     rows = await conn.fetch(
-        "SELECT name, keywords, priority, content FROM prompt_modules WHERE active = TRUE AND name != 'core-behavior' ORDER BY priority"
+        "SELECT name, keywords, priority, content FROM prompt_modules WHERE active = TRUE AND name NOT IN ('core-behavior', 'core-self-knowledge') ORDER BY priority"
     )
     matched = []
     for row in rows:

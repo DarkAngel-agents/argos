@@ -44,11 +44,11 @@ TOOLS = [
     {
         "name": "execute_command",
         "defer_loading": False,
-        "description": "Execute a shell command on any machine in the network. Use for ANY simple command: df, free, ps, top, systemctl, cat, ls, uname, etc. Use ONLY after explicit confirmation from the user. For known machines use the name (beasty, database, master, claw, zeus). For new VMs announced via ISO use the IP directly.",
+        "description": "Execută o comandă shell pe una din mașinile din rețea. Foloseste pentru ORICE comanda simpla: df, free, ps, top, systemctl, cat, ls, uname, etc. Folosește DOAR după confirmare explicită din partea utilizatorului. Pentru mașini cunoscute folosește numele (beasty, database, master, claw, zeus). Pentru VM-uri noi anunțate via ISO folosește IP-ul direct.",
         "input_schema": {
             "type": "object",
             "properties": {
-                "machine": {"type": "string", "description": "Machine name or direct IP"},
+                "machine": {"type": "string", "description": "Numele mașinii sau IP direct"},
                 "command": {"type": "string", "description": "Comanda shell de executat"}
             },
             "required": ["machine", "command"]
@@ -57,11 +57,11 @@ TOOLS = [
     {
         "name": "nixos_rebuild",
         "defer_loading": False,
-        "description": "Backup configuration.nix to database, optionally write new config, execute nixos-rebuild switch. Use ONLY after explicit confirmation.",
+        "description": "Backup configuration.nix pe database, opțional scrie config nouă, execută nixos-rebuild switch. Folosește DOAR după confirmare explicită.",
         "input_schema": {
             "type": "object",
             "properties": {
-                "config_content": {"type": "string", "description": "Full content of the new configuration.nix."}
+                "config_content": {"type": "string", "description": "Conținutul complet al noului configuration.nix."}
             },
             "required": []
         }
@@ -69,7 +69,7 @@ TOOLS = [
     {
         "name": "create_job",
         "defer_loading": True,
-        "description": "Create a multi-step job requiring approval for destructive operations (delete VM, format disk, modify NixOS config, restart critical services). ALWAYS use instead of execute_command when operation is destructive or irreversible.",
+        "description": "Creează un job cu mai mulți pași care necesită aprobare pentru operații distructive (ștergere VM, formatare disk, modificare NixOS config, restart servicii critice). Folosește OBLIGATORIU în loc de execute_command când operația e distructivă sau ireversibilă.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -77,13 +77,13 @@ TOOLS = [
                 "steps": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "List of commands in sequential order"
+                    "description": "Lista de comenzi în ordine secvențială"
                 },
-                "target": {"type": "string", "description": "Target machine (e.g.: zeus, 192.168.1.1)"},
-                "target": {"type": "string", "description": "Target machine (e.g.: zeus, 192.168.1.1)"},
+                "target": {"type": "string", "description": "Mașina țintă (ex: zeus, 11.11.11.119)"},
+                "risk_level": {
                     "type": "string",
                     "enum": ["low", "medium", "high", "critical"],
-                    "description": "Risk level. critical/high requires approval before execution."
+                    "description": "Nivelul de risc. critical/high necesită aprobare înainte de execuție."
                 }
             },
             "required": ["title", "steps", "target", "risk_level"]
@@ -102,8 +102,8 @@ TOOLS = [
                 },
                 "workdir": {
                     "type": "string",
-                    "description": "Working directory. Default: /home/USER/.argos/argos-core. Or /etc/nixos for configuration.nix"
-                    "description": "Working directory. Default: /home/USER/.argos/argos-core. Or /etc/nixos for configuration.nix"
+                    "description": "Directorul de lucru. Default: /home/darkangel/.argos/argos-core. Altfel: /etc/nixos pentru configuration.nix"
+                }
             },
             "required": ["prompt"]
         }
@@ -139,12 +139,12 @@ TOOLS = [
     {
         "name": "read_file",
         "defer_loading": False,
-        "description": "Read the content of a file from a machine in the network.",
+        "description": "Citește conținutul unui fișier de pe o mașină din rețea.",
         "input_schema": {
             "type": "object",
             "properties": {
-                "machine": {"type": "string", "description": "Machine name or direct IP"},
-                "path": {"type": "string", "description": "Full path of the file"}
+                "machine": {"type": "string", "description": "Numele mașinii sau IP direct"},
+                "path": {"type": "string", "description": "Calea completă a fișierului"}
             },
             "required": ["machine", "path"]
         }
@@ -152,12 +152,12 @@ TOOLS = [
     {
         "name": "github_push",
         "defer_loading": True,
-        "description": "Push code to GitHub. Stage changes, create commit and push. Use ONLY after explicit confirmation from the user.",
+        "description": "Face push de cod pe GitHub. Adaugă modificările, creează commit și face push. Folosește DOAR după confirmare explicită din partea utilizatorului.",
         "input_schema": {
             "type": "object",
             "properties": {
-                "machine": {"type": "string", "description": "Machine name where the repository is located"},
-                "repo_path": {"type": "string", "description": "Path to the local Git repository"},
+                "machine": {"type": "string", "description": "Numele mașinii unde se află repository-ul"},
+                "repo_path": {"type": "string", "description": "Calea către repository-ul Git local"},
                 "commit_message": {"type": "string", "description": "Mesajul de commit"},
                 "branch": {"type": "string", "description": "Branch-ul pe care se face push (default: main)"}
             },
@@ -169,7 +169,7 @@ TOOLS = [
 
 class NewConversationRequest(BaseModel):
     project_id: Optional[int] = None
-    title: Optional[str] = "New conversation"
+    title: Optional[str] = "Conversație nouă"
 
 class MessageRequest(BaseModel):
     conversation_id: int
@@ -221,7 +221,7 @@ async def estimate_cost(req: EstimateRequest):
     from api.main import pool, system_prompt
     messages = await _load_messages_compressed(pool, req.conversation_id)
     messages.append({"role": "user", "content": req.content})
-    client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+    client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY") or os.getenv("CLAUDE_TOKEN"))
     try:
         kwargs = {"model": SONNET, "messages": messages}
         if system_prompt:
@@ -337,7 +337,7 @@ async def send_message(req: MessageRequest):
     elif not providers.get("claude_enabled", True) and not providers.get("grok_enabled", False):
         active_provider = "local"
     print(f"[ARGOS] Provider: {active_provider}")
-    client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+    client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY") or os.getenv("CLAUDE_TOKEN"))
 
     full_response_text = ""
     total_input = 0
@@ -363,7 +363,7 @@ async def send_message(req: MessageRequest):
                 break
             except anthropic.APIStatusError as e:
                 if e.status_code == 529 and attempt < MAX_RETRIES - 1:
-                    retry_msg = f"⏳ API overloaded — retry {attempt+1}/{MAX_RETRIES} in 60s"
+                    retry_msg = f"⏳ API supraîncărcat — retry {attempt+1}/{MAX_RETRIES} în 60s"
                     print(f"[ARGOS] {retry_msg}")
                     async with pool.acquire() as conn:
                         await conn.execute(
@@ -385,14 +385,14 @@ async def send_message(req: MessageRequest):
         if response is None:
             async with pool.acquire() as conn:
                 await conn.execute("UPDATE messages SET pending = FALSE WHERE id = $1", user_msg_id)
-            raise HTTPException(status_code=503, detail="API overloaded after 10 retries")
+            raise HTTPException(status_code=503, detail="API supraîncărcat după 10 încercări")
 
         total_input += response.usage.input_tokens
         total_output += response.usage.output_tokens
 
-        text_blocks = [b.text for b in response.content if hasattr(b, 'text')]
+        text_blocks = [str(b.text) for b in response.content if hasattr(b, "text") and b.text is not None]
         if text_blocks:
-            full_response_text += "\n".join(text_blocks)
+            full_response_text += "\n".join(t for t in text_blocks if t is not None)
 
         if response.stop_reason != "tool_use":
             break
@@ -443,8 +443,8 @@ async def send_message(req: MessageRequest):
                 raise HTTPException(status_code=200, detail="stopped")
 
             rc = result.get('returncode', '?')
-            stdout = (result.get('stdout', '') or '')[:300]
-            stderr = (result.get('stderr', '') or '')[:100]
+            stdout = _mask_credentials((result.get('stdout', '') or '')[:300])
+            stderr = _mask_credentials((result.get('stderr', '') or '')[:100])
             status = "✓" if rc == 0 else f"✗ rc={rc}"
             result_info = f"{status} {stdout}" if stdout else f"{status} {stderr}" if stderr else status
             result_info = _truncate_result_info(result_info)
@@ -669,7 +669,7 @@ async def _execute_tool(name: str, inputs: dict, pool=None) -> dict:
         from api.backup import backup_file, auto_rollback_if_broken, WATCHED_FILES
         prompt = inputs["prompt"]
         workdir = inputs.get("workdir", "/home/darkangel/.argos/argos-core")
-        workdir = inputs.get("workdir", "/home/darkangel/.argos/argos-core")
+
         # Detectam ce fisiere ar putea fi modificate si facem backup
         modified_modules = []
         for module_name, file_path in WATCHED_FILES.items():
@@ -742,7 +742,7 @@ async def _execute_tool(name: str, inputs: dict, pool=None) -> dict:
 
         return {
             "returncode": 0,
-            "stdout": f"✓ GitHub push successful: {branch} @ {repo_path}\n" + "\n".join(r.get("stdout", "") for r in results),
+            "stdout": f"✓ Push pe GitHub reușit: {branch} @ {repo_path}\n" + "\n".join(r.get("stdout", "") for r in results),
             "stderr": ""
         }
 
@@ -809,7 +809,7 @@ async def _estimate_tokens(messages: list) -> int:
 
 
 async def _compress_messages(messages: list, keep_last: int = 5) -> list:
-    """Compress old messages with summary generated by local qwen3"""
+    """Comprima mesajele vechi cu rezumat generat de qwen3 local"""
     if len(messages) <= keep_last:
         return messages
 
@@ -818,7 +818,7 @@ async def _compress_messages(messages: list, keep_last: int = 5) -> list:
 
     # Rezumat via qwen3 local
     text = "\n".join(f"{m['role'].upper()}: {str(m['content'])[:200]}" for m in to_compress)
-    prompt = f"Summarize in max 300 words the following technical conversation, keeping important decisions and commands:\n\n{text}"
+    prompt = f"Rezuma in maxim 300 cuvinte urmatoarea conversatie tehnica, pastrând deciziile si comenzile importante:\n\n{text}"
 
     try:
         import httpx
@@ -863,8 +863,9 @@ def _mask_credentials(text: str) -> str:
     text = _re.sub(r'(X-API-KEY[:\s]+)[A-Za-z0-9\-_]{20,}', r'***', text)
     # password=
     text = _re.sub(r'(password=|pass=)\S+', r'***', text)
-    # Known passwords to mask
-    for known in ['CHANGE_ME']:
+    # Parole cunoscute
+    for known in ['REDACTED@999', 'REDACTED@9', 'REDACTED']:
+        text = text.replace(known, '***')
     return text
 
 
@@ -939,7 +940,7 @@ async def _detect_and_load_skills(pool, conversation_id: int, text: str) -> str:
 
     if skill_content:
         print(f"[ARGOS] Skills incarcate: {[n for n,_ in to_load]}")
-        return "\n\n---\n# SKILLS INCARCATE\n" + "\n\n---\n".join(skill_content)
+        return "\n\n---\n# SKILLS INCARCATE\n" + "\n\n---\n".join(s for s in skill_content if s is not None)
     return ""
 
 
@@ -1151,7 +1152,7 @@ async def _generate_skill_from_web(pool, system_name: str, system_info: str, con
     web_content = await _grok_search_for_skill(system_name, system_info)
 
     # 2. Claude structureaza in format Skill
-    client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+    client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY") or os.getenv("CLAUDE_TOKEN"))
     skill_prompt = f"""Genereaza un fisier Skill markdown pentru sistemul: {system_name}
 Informatii sistem: {system_info[:200]}
 
@@ -1178,7 +1179,7 @@ loaded_when: <cand se incarca>
 <comenzi care distrug date - INTOTDEAUNA cu confirmare explicita Mihai>
 
 ## Gotchas
-<common issues, known bugs>
+<probleme comune, buguri cunoscute>
 
 Scrie DOAR continutul fisierului markdown. Fara explicatii extra."""
 

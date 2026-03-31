@@ -259,6 +259,7 @@
   .profile-btn.selected { border-color:var(--accent); color:var(--accent); background:var(--accent-glow); }
   #nanite-modal-btns { display:flex; gap:7px; justify-content:flex-end; margin-top:18px; }
   #nanite-custom-prompt { display:none; }
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
 </style>
 </head>
 <body>
@@ -267,7 +268,7 @@
     <h1>Argos</h1>
     <span>// local instance</span>
   </div>
-  <button id="btn-new">+ New conversation</button>
+  <button id="btn-new">+ Conversație nouă</button>
   <div id="conversations-list"></div>
   <div id="sidebar-footer">
     <a href="https://platform.claude.com/settings/billing" target="_blank">→ billing</a>
@@ -276,13 +277,13 @@
 </div>
 <div id="main">
   <div id="chat-header">
-    <div id="chat-title">Select a conversation</div>
+    <div id="chat-title">Selectează o conversație</div>
     <div style="display:flex;align-items:center;gap:12px">
       <button id="btn-systems" onclick="toggleSystems()" style="background:transparent;border:1px solid var(--border2);border-radius:4px;padding:4px 10px;color:var(--text3);font-family:'JetBrains Mono',monospace;font-size:10px;cursor:pointer;transition:all .15s" onmouseenter="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseleave="this.style.borderColor='var(--border2)';this.style.color='var(--text3)'">&#8862; systems</button>
       <button id="btn-archives" onclick="toggleArchives()" style="background:transparent;border:1px solid var(--border2);border-radius:4px;padding:4px 10px;color:var(--text3);font-family:'JetBrains Mono',monospace;font-size:10px;cursor:pointer;transition:all .15s" onmouseenter="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseleave="this.style.borderColor='var(--border2)';this.style.color='var(--text3)'">&#9678; archives</button>
       <button id="btn-log" onclick="toggleLog()" style="background:transparent;border:1px solid var(--border2);border-radius:4px;padding:4px 10px;color:var(--text3);font-family:'JetBrains Mono',monospace;font-size:10px;cursor:pointer;transition:all .15s" onmouseenter="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseleave="this.style.borderColor='var(--border2)';this.style.color='var(--text3)'">⬡ log</button>
       <button id="btn-jobs" onclick="toggleJobs()" style="background:transparent;border:1px solid var(--border2);border-radius:4px;padding:4px 10px;color:var(--text3);font-family:'JetBrains Mono',monospace;font-size:10px;cursor:pointer;transition:all .15s;position:relative" onmouseenter="this.style.borderColor='var(--yellow)';this.style.color='var(--yellow)'" onmouseleave="this.style.borderColor='var(--border2)';this.style.color='var(--text3)'">⚡ jobs <span id="jobs-badge" style="display:none;position:absolute;top:-4px;right:-4px;background:#f87171;color:#141414;border-radius:50%;width:14px;height:14px;font-size:9px;line-height:14px;text-align:center;font-weight:700"></span></button>
-      <button id="btn-stop" onclick="stopConversation()" style="display:none;background:#7a1a1a;border:none;border-radius:4px;padding:4px 10px;color:#f87171;font-family:'JetBrains Mono',monospace;font-size:10px;cursor:pointer;">⛔ stop</button>
+      <span id="activity-dot" style="display:none;width:8px;height:8px;background:#4ade80;border-radius:50%;margin-right:8px;animation:blink 1s infinite;"></span><button id="btn-stop" onclick="stopConversation()" style="display:none;background:#7a1a1a;border:none;border-radius:4px;padding:4px 10px;color:#f87171;font-family:'JetBrains Mono',monospace;font-size:10px;cursor:pointer;">⛔ stop</button>
       <button id="btn-claude" onclick="toggleProvider('claude')" style="background:#1a1a1a;border:1px solid #22c55e;border-radius:4px;padding:4px 10px;color:#22c55e;font-family:'JetBrains Mono',monospace;font-size:10px;cursor:pointer;font-weight:500;transition:all .15s;">◉ CLAUDE</button>
       <button id="btn-grok" onclick="toggleProvider('grok')" style="background:#1a1a1a;border:1px solid #8b5cf6;border-radius:4px;padding:4px 10px;color:#8b5cf6;font-family:'JetBrains Mono',monospace;font-size:10px;cursor:pointer;font-weight:500;transition:all .15s;">◉ GROK</button>
       <button id="btn-local" onclick="toggleProvider('local')" style="background:#1a1a1a;border:1px solid #f97316;border-radius:4px;padding:4px 10px;color:#f97316;font-family:'JetBrains Mono',monospace;font-size:10px;cursor:pointer;font-weight:500;transition:all .15s;">◉ LOCAL</button>
@@ -302,13 +303,13 @@
   <div id="messages">
     <div id="empty-state">
       <h2>Argos</h2>
-      <p>Create a new conversation or select an existing one.</p>
+      <p>Creează o conversație nouă sau selectează una existentă.</p>
     </div>
   </div>
   <div id="compress-warning">
-    <span>⚠ long conversation — <span id="compress-tokens"></span> tokens</span>
-    <button id="btn-compress">Compress now</button>
-    <button id="btn-fork-instant" style="display:none;background:#1a3a2a;border:1px solid var(--green);border-radius:4px;padding:5px 12px;color:var(--green);font-family:'JetBrains Mono',monospace;font-size:10px;cursor:pointer;white-space:nowrap;" onclick="forkInstant()">↱ new conv</button>
+    <span>⚠ conversație lungă — <span id="compress-tokens"></span> tokeni</span>
+    <button id="btn-compress">Comprimă acum</button>
+    <button id="btn-fork-instant" style="display:none;background:#1a3a2a;border:1px solid var(--green);border-radius:4px;padding:5px 12px;color:var(--green);font-family:'JetBrains Mono',monospace;font-size:10px;cursor:pointer;white-space:nowrap;" onclick="forkInstant()">↱ conv nouă</button>
   </div>
   <div id="estimate-bar">
     <span>↑ input estimat:</span>
@@ -322,7 +323,7 @@
         <svg viewBox="0 0 24 24"><path d="M2 21l21-9L2 3v7l15 2-15 2v7z"/></svg>
       </button>
     </div>
-    <div id="input-hint">Enter = send &nbsp;·&nbsp; Shift+Enter = new line</div>
+    <div id="input-hint">Enter = trimite &nbsp;·&nbsp; Shift+Enter = linie nouă</div>
   </div>
 </div>
 <!-- Systems Panel -->
@@ -373,30 +374,30 @@
 </div>
 <div id="modal-overlay">
   <div id="modal">
-    <h3>New conversation</h3>
+    <h3>Conversație nouă</h3>
     <input type="text" id="modal-input" placeholder="Ex: NixOS config, HA automation..." />
     <div id="modal-btns">
-      <button class="btn-modal btn-cancel" id="modal-cancel">Cancel</button>
-      <button class="btn-modal btn-confirm" id="modal-confirm">Create</button>
+      <button class="btn-modal btn-cancel" id="modal-cancel">Anulează</button>
+      <button class="btn-modal btn-confirm" id="modal-confirm">Creează</button>
     </div>
   </div>
 
 <div id="archive-modal-overlay">
   <div id="archive-modal">
-    <h3>Archive conversation</h3>
-    <input type="text" id="archive-modal-title" placeholder="Archive title..." />
+    <h3>Arhivează conversație</h3>
+    <input type="text" id="archive-modal-title" placeholder="Titlu arhivă..." />
     <div id="archive-modal-tags-label">TAGURI</div>
     <div id="archive-modal-tags"></div>
     <div style="display:flex;gap:7px;justify-content:flex-end">
-      <button class="btn-modal btn-cancel" id="archive-modal-cancel">Cancel</button>
-      <button class="btn-modal btn-confirm" id="archive-modal-save">Save</button>
+      <button class="btn-modal btn-cancel" id="archive-modal-cancel">Anulează</button>
+      <button class="btn-modal btn-confirm" id="archive-modal-save">Salvează</button>
     </div>
   </div>
 </div>
 </div>
 <script>
 const API=window.location.origin+'/api';
-let currentConvId=null,estimateTimer=null;
+let currentConvId=null,estimateTimer=null,lastActivity=Date.now();
 function escapeHtml(t){return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 function formatMessage(text){
   let e=escapeHtml(text);
@@ -418,11 +419,11 @@ async function loadConversations(){
       el.innerHTML=`
         <div style="display:flex;align-items:center;justify-content:space-between;gap:4px">
           <div style="overflow:hidden;flex:1">
-            <div class="conv-title">${escapeHtml(c.title||'No title')}</div>
+            <div class="conv-title">${escapeHtml(c.title||'Fără titlu')}</div>
             <div class="conv-date">${timeAgo(c.updated_at)}</div>
           </div>
-          <button onclick="event.stopPropagation();openArchiveModal(${c.id},'${(c.title||'').replace(/'/g,String.fromCharCode(92)+String.fromCharCode(39))}')" style="background:transparent;border:none;color:var(--text3);cursor:pointer;font-size:11px;padding:2px 4px;border-radius:3px;flex-shrink:0;" title="Archive">&#128229;</button>
-          <button onclick="event.stopPropagation();deleteConversation(${c.id})" style="background:transparent;border:none;color:#f87171;cursor:pointer;font-size:13px;padding:2px 5px;border-radius:3px;flex-shrink:0;" title="Delete">&#x2715;</button>
+          <button onclick="event.stopPropagation();openArchiveModal(${c.id},'${(c.title||'').replace(/'/g,String.fromCharCode(92)+String.fromCharCode(39))}')" style="background:transparent;border:none;color:var(--text3);cursor:pointer;font-size:11px;padding:2px 4px;border-radius:3px;flex-shrink:0;" title="Arhivează">&#128229;</button>
+          <button onclick="event.stopPropagation();${c.id===1?'clearInstant()':'deleteConversation('+c.id+')'}" style="background:transparent;border:none;color:#f87171;cursor:pointer;font-size:13px;padding:2px 5px;border-radius:3px;flex-shrink:0;" title="Delete">&#x2715;</button>
         </div>`;
       el.addEventListener('click',()=>openConversation(c.id,c.title));
       list.appendChild(el);
@@ -431,7 +432,7 @@ async function loadConversations(){
 }
 async function openConversation(id,title){
   currentConvId=id;
-  document.getElementById('chat-title').textContent=title||'No title';
+  document.getElementById('chat-title').textContent=title||'Fără titlu';
   document.getElementById('btn-fork-instant').style.display = (id===1) ? 'inline-block' : 'none';
   document.getElementById('empty-state')?.remove();
   document.querySelectorAll('.conv-item').forEach(el=>el.classList.toggle('active',parseInt(el.dataset.id)===id));
@@ -451,7 +452,7 @@ async function openConversation(id,title){
     if(p.pending){
       showTyping();
       document.getElementById('btn-send').disabled=true;
-      document.getElementById('status-text').textContent='processing...';
+      document.getElementById('status-text').textContent='se procesează...';
       document.getElementById('status-dot').style.background='var(--yellow)';
       // Polling pana apare raspunsul
       const poll=setInterval(async()=>{
@@ -507,7 +508,7 @@ async function sendMessage(){
   input.value='';input.style.height='auto';
   document.getElementById('estimate-bar').classList.remove('visible');
   document.getElementById('btn-send').disabled=true;
-  document.getElementById('status-text').textContent='thinking...';
+  document.getElementById('status-text').textContent='gândesc...';
   document.getElementById('status-dot').style.background='var(--yellow)';
   appendMessage('user',text);showTyping();
   // Resetam lastChatMsgId la id-ul curent ca sa prinda raspunsul nou
@@ -521,43 +522,39 @@ async function sendMessage(){
     document.getElementById('btn-stop').style.display='none';
   }
 
-  document.getElementById('btn-stop').style.display='inline-block';
+  document.getElementById('btn-stop').style.display='inline-block';document.getElementById('activity-dot').style.display='inline-block';lastActivity=Date.now();
 
   try{
     const res=await fetch(`${API}/messages`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({conversation_id:currentConvId,content:text})});
     const data=await res.json();
-    if(res.status===409){resetUI();return;} // duplicate - ignora
-    // Nu afisam direct - polling-ul din pollLog va prinde raspunsul din DB
-    loadConversations();
-    resetUI();
-  }catch(e){
-    // Nu ascundem typing - facem polling pana vine raspunsul
-    let pollCount=0;
-    const pollInterval=setInterval(async()=>{
-      pollCount++;
-      try{
-        const r=await fetch(`${API}/conversations/${currentConvId}/pending`);
-        const p=await r.json();
-        if(!p.pending){
-          clearInterval(pollInterval);
-          // Reload mesaje complete
-          const r2=await fetch(`${API}/conversations/${currentConvId}/messages`);
-          const msgs=await r2.json();
-          const container=document.getElementById('messages');
-          container.innerHTML='';
-          msgs.forEach(m=>appendMessage(m.role,m.content,false));
-          loadConversations();
-          resetUI();
-        }
-      }catch(pe){console.error(pe);}
-      if(pollCount>120){clearInterval(pollInterval);resetUI();appendMessage('assistant','⚠ Timeout after 10 minutes.');}
-    },5000);
-  }
+    if(res.status===409){resetUI();return;}
+  }catch(e){console.error(e);}
+
+  // Polling intotdeauna dupa trimitere
+  let pollCount=0;
+  const pollInterval=setInterval(async()=>{
+    pollCount++;
+    try{
+      const r=await fetch(`${API}/conversations/${currentConvId}/pending`);
+      const p=await r.json();
+      if(p.pending){lastActivity=Date.now();}
+      if(!p.pending){
+        clearInterval(pollInterval);
+        const r2=await fetch(`${API}/conversations/${currentConvId}/messages`);
+        const msgs=await r2.json();
+        const container=document.getElementById('messages');
+        container.innerHTML='';
+        msgs.forEach(m=>appendMessage(m.role,m.content,false));
+        scrollToBottom();loadConversations();resetUI();document.getElementById('activity-dot').style.display='none';lastActivity=Date.now();
+      }
+    }catch(pe){console.error(pe);}
+    if(pollCount>120){clearInterval(pollInterval);resetUI();appendMessage('assistant','⚠ Timeout after 10 minutes.');}
+  },2000);
 }
 document.getElementById('btn-new').addEventListener('click',()=>{document.getElementById('modal-input').value='';document.getElementById('modal-overlay').classList.add('visible');setTimeout(()=>document.getElementById('modal-input').focus(),50);});
 document.getElementById('modal-cancel').addEventListener('click',()=>document.getElementById('modal-overlay').classList.remove('visible'));
 document.getElementById('modal-confirm').addEventListener('click',async()=>{
-  const title=document.getElementById('modal-input').value.trim()||'New conversation';
+  const title=document.getElementById('modal-input').value.trim()||'Conversație nouă';
   document.getElementById('modal-overlay').classList.remove('visible');
   try{const res=await fetch(`${API}/conversations`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title})});const conv=await res.json();await loadConversations();openConversation(conv.id,conv.title);}catch(e){console.error(e);}
 });
@@ -567,18 +564,25 @@ msgInput.addEventListener('input',()=>{msgInput.style.height='auto';msgInput.sty
 msgInput.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage();}});
 document.getElementById('btn-send').addEventListener('click',sendMessage);
 loadConversations();
-setInterval(loadConversations,30000);
+setInterval(()=>{if(Date.now()-lastActivity>300000)loadConversations();},30000);
 // Auto-open Instant on load
 openConversation(1,'Instant');
 
+async function clearInstant(){
+  if(!confirm('Clear all messages from Instant chat?'))return;
+  try{
+    await fetch(`${API}/conversations/1/messages`,{method:'DELETE'});
+    openConversation(1,'Instant');
+  }catch(e){console.error(e);}
+}
 async function deleteConversation(id){
-  if(!confirm('Delete this conversation?'))return;
+  if(!confirm('Ștergi conversația?'))return;
   try{
     await fetch(`${API}/conversations/${id}`,{method:'DELETE'});
     if(currentConvId===id){
       currentConvId=null;
-      document.getElementById('chat-title').textContent='Select a conversation';
-      document.getElementById('messages').innerHTML='<div id="empty-state"><h2>Argos</h2><p>Create a new conversation or select an existing one.</p></div>';
+      document.getElementById('chat-title').textContent='Selectează o conversație';
+      document.getElementById('messages').innerHTML='<div id="empty-state"><h2>Argos</h2><p>Creează o conversație nouă sau selectează una existentă.</p></div>';
     }
     loadConversations();
   }catch(e){console.error(e);}
@@ -636,8 +640,8 @@ async function loadJobs(){
         <div style="font-size:9px;color:var(--text3)">pas ${job.current_segment||0} · ${timeAgo(job.updated_at)}</div>
         ${job.status==='waiting_auth'?`
         <div style="display:flex;gap:6px;margin-top:6px">
-          <button onclick="decideJob(${job.id},'approved')" style="flex:1;background:#1a3a1a;border:1px solid var(--green);border-radius:3px;color:var(--green);font-family:'JetBrains Mono',monospace;font-size:10px;padding:4px;cursor:pointer">✓ Approve</button>
-          <button onclick="decideJob(${job.id},'denied')" style="flex:1;background:#3a1a1a;border:1px solid #f87171;border-radius:3px;color:#f87171;font-family:'JetBrains Mono',monospace;font-size:10px;padding:4px;cursor:pointer">✕ Deny</button>
+          <button onclick="decideJob(${job.id},'approved')" style="flex:1;background:#1a3a1a;border:1px solid var(--green);border-radius:3px;color:var(--green);font-family:'JetBrains Mono',monospace;font-size:10px;padding:4px;cursor:pointer">✓ Aprobă</button>
+          <button onclick="decideJob(${job.id},'denied')" style="flex:1;background:#3a1a1a;border:1px solid #f87171;border-radius:3px;color:#f87171;font-family:'JetBrains Mono',monospace;font-size:10px;padding:4px;cursor:pointer">✕ Refuză</button>
         </div>`:''}
       `;
       list.appendChild(div);
@@ -662,7 +666,7 @@ async function decideJob(jobId, decision){
     if(decision==='approved'){
       // Executa job-ul
       await fetch(`${API}/jobs/${jobId}/execute`,{method:'POST'});
-      appendMessage('assistant',`✓ Job #${jobId} approved and started.`);
+      appendMessage('assistant',`✓ Job #${jobId} aprobat și pornit.`);
     } else {
       appendMessage('assistant',`✕ Job #${jobId} refuzat.`);
     }
@@ -771,7 +775,7 @@ async function checkTokenCount(){
 
 document.getElementById('btn-compress').addEventListener('click',async()=>{
   if(!currentConvId)return;
-  document.getElementById('btn-compress').textContent='Compressing...';
+  document.getElementById('btn-compress').textContent='Se comprimă...';
   document.getElementById('btn-compress').disabled=true;
   try{
     const res=await fetch(`${API}/conversations/compress`,{
@@ -785,7 +789,7 @@ document.getElementById('btn-compress').addEventListener('click',async()=>{
     }
   }catch(e){console.error(e);}
   finally{
-    document.getElementById('btn-compress').textContent='Compress now';
+    document.getElementById('btn-compress').textContent='Comprimă acum';
     document.getElementById('btn-compress').disabled=false;
   }
 });
@@ -820,8 +824,8 @@ function showVMNotification(vm){
     <div style="color:#c49a6c;font-weight:500;margin-bottom:6px">⬡ VM nou detectat</div>
     <div style="color:#a09890;margin-bottom:10px">IP: <span style="color:#d8d0c4">${vm.ip}</span></div>
     <div style="display:flex;gap:8px">
-      <button onclick="useVM('${vm.ip}',this.closest('div[style]'))" style="background:#c49a6c;border:none;border-radius:4px;padding:5px 10px;color:#141414;font-family:'JetBrains Mono',monospace;font-size:11px;cursor:pointer">Configure</button>
-      <button onclick="this.closest('div[style]').remove()" style="background:#222;border:1px solid #3a3a3a;border-radius:4px;padding:5px 10px;color:#6a6460;font-family:'JetBrains Mono',monospace;font-size:11px;cursor:pointer">Ignore</button>
+      <button onclick="useVM('${vm.ip}',this.closest('div[style]'))" style="background:#c49a6c;border:none;border-radius:4px;padding:5px 10px;color:#141414;font-family:'JetBrains Mono',monospace;font-size:11px;cursor:pointer">Configurează</button>
+      <button onclick="this.closest('div[style]').remove()" style="background:#222;border:1px solid #3a3a3a;border-radius:4px;padding:5px 10px;color:#6a6460;font-family:'JetBrains Mono',monospace;font-size:11px;cursor:pointer">Ignoră</button>
     </div>
   `;
   document.body.appendChild(notif);
@@ -848,7 +852,7 @@ checkVMs();
 
 // Buton compress manual mereu vizibil in sidebar
 const compressBtn=document.createElement('button');
-compressBtn.textContent='⬡ Compress conversation';
+compressBtn.textContent='⬡ Comprimă conversație';
 compressBtn.style.cssText=`
   margin:8px 14px 0;padding:7px 13px;
   background:transparent;border:1px solid #3a3a3a;border-radius:5px;
@@ -900,7 +904,7 @@ async function loadArchives(){
     list.innerHTML = '';
 
     if(!ad.archives || ad.archives.length===0){
-      list.innerHTML = '<div style="padding:20px 16px;color:var(--text3);font-size:11px;">No archives.</div>';
+      list.innerHTML = '<div style="padding:20px 16px;color:var(--text3);font-size:11px;">Nicio arhivă.</div>';
       return;
     }
 
@@ -915,7 +919,7 @@ async function loadArchives(){
         return `<span class="tag-chip" style="background:${info.color}22;color:${info.color};border:1px solid ${info.color}44" onclick="event.stopPropagation();archivesActiveTag='${t}';loadArchives()">${info.icon||''} ${info.display_name}</span>`;
       }).join('');
       div.innerHTML = `
-        <div class="archive-title">${escapeHtml(arch.title||'No title')}</div>
+        <div class="archive-title">${escapeHtml(arch.title||'Fără titlu')}</div>
         <div class="archive-meta">${timeAgo(arch.created_at)}</div>
         <div class="archive-tags">${tagsHtml}</div>
         <button class="btn-resume" onclick="resumeArchive(${arch.id})">&#9654; Resume</button>
@@ -932,7 +936,7 @@ async function resumeArchive(archiveId){
     if(data.conversation_id){
       toggleArchives();
       await loadConversations();
-      openConversation(data.conversation_id, data.title||'Summarized archive');
+      openConversation(data.conversation_id, data.title||'Arhivă resumată');
     }
   }catch(e){ console.error(e); }
 }
@@ -977,7 +981,7 @@ document.getElementById('archive-modal-save').addEventListener('click', async()=
   if(!title || !archiveModalConvId) return;
   try{
     const btn = document.getElementById('archive-modal-save');
-    btn.textContent = 'Saving...';
+    btn.textContent = 'Se salvează...';
     btn.disabled = true;
     await fetch(`${API}/archives`, {
       method:'POST',
@@ -994,7 +998,7 @@ document.getElementById('archive-modal-save').addEventListener('click', async()=
     console.error(e);
   }finally{
     const btn = document.getElementById('archive-modal-save');
-    btn.textContent = 'Save';
+    btn.textContent = 'Salvează';
     btn.disabled = false;
   }
 });
