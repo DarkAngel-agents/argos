@@ -43,6 +43,7 @@ Target: reduce current 129 entries to ~65 high-quality unique skills.
 ### Advanced Reasoning Engine
 Restructured multi-step reasoning with explicit chain-of-thought.
 Better decomposition of complex infrastructure problems before acting.
+Special focus on high-precision scenarios: disaster recovery, failover sequences, and destructive operations — where order of execution and verification between steps is critical.
 
 ### PWA Mobile App
 Progressive Web App for mobile — full ARGOS interface on your phone.
