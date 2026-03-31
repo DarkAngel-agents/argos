@@ -67,36 +67,46 @@ See [ROADMAP.md](ROADMAP.md) for what's coming.
 
 ## Hardware Requirements
 
-### Minimum (works, Ollama runs on CPU)
-- CPU: 4 cores, x86_64
+### Minimum — untested, theoretical baseline
+- CPU: 4+ cores x86_64
 - RAM: 8GB
 - Storage: 40GB
-- GPU: none required
+- GPU: not required (Ollama skipped, API-only mode)
 - OS: Fedora 42+, Debian 12+, Ubuntu 22.04+
 
-At minimum spec, ARGOS uses Claude/Grok API for reasoning and skips local Ollama inference.
-Expect slower responses on complex tasks. Everything else works fine.
+*Not yet tested at this spec. At minimum config, ARGOS relies entirely on Claude/Grok API.
+No local inference. Everything else should work — in theory.*
 
-### Recommended (what ARGOS was built and tested on)
-- CPU: 8+ cores (Ryzen/Intel 10th gen+)
+### Entry level — tested, works well
+- CPU: Intel Core i7 6th gen or equivalent
 - RAM: 32GB
-- Storage: 100GB SSD
-- GPU: NVIDIA RTX 3080 10GB VRAM (or equivalent 8GB+ VRAM)
+- Storage: 60GB SSD
+- GPU: NVIDIA RTX 2060 (6GB VRAM)
+- OS: Fedora 44, Debian 13
+
+Ollama runs smaller local models at this spec. Good enough for daily use and testing.
+This is the laptop/workstation tier — solid for development and light production.
+
+### Recommended — production, tested daily
+- CPU: 8+ cores (Ryzen/Intel 10th gen+)
+- RAM: 32GB+
+- Storage: 100GB+ SSD
+- GPU: NVIDIA RTX 3080 10GB VRAM
 - OS: NixOS 25.11 or Fedora 44
 
-With a capable GPU, Ollama runs qwen3:14b locally — free inference for read-only operations,
-health checks, and anything that does not need Claude-level reasoning.
+Runs qwen3:14b locally without breaking a sweat. This is what ARGOS was built and tested on.
+Local inference handles all read-only ops, health checks, and routine tasks for free.
 
-### Two-node setup (production, what runs 24/7 here)
-- Node 1 (Beasty): NixOS, RTX 3080, primary compute + DB + registry
+### Two-node setup — what runs 24/7 here
+- Node 1 (Beasty): NixOS 25.11, RTX 3080, primary compute + DB + registry
 - Node 2 (Hermes): Debian 13 VM on dedicated server, permanent Swarm Leader
 - PostgreSQL streaming replication with HAProxy auto-failover < 3 seconds
-- DEFCON monitoring on both nodes
+- DEFCON monitoring on both nodes with automatic failover
 
 ### Future — full local autonomous (no external API)
-Truly autonomous operation without Claude/Grok API requires running a large local model
-that can do multi-step reasoning, tool use, and infrastructure decisions reliably.
-We are talking RTX 6000 Ada (48GB VRAM) territory, or a multi-GPU setup.
+Truly autonomous operation without Claude/Grok API requires a large local model capable of
+multi-step reasoning, tool use, and infrastructure decisions without hallucinating.
+Think RTX 6000 Ada (48GB VRAM) or a multi-GPU setup.
 
 *I am quite attached to both my kidneys, so this remains a future plan.*
 
