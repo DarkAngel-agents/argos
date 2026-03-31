@@ -79,7 +79,7 @@ TOOLS = [
                     "items": {"type": "string"},
                     "description": "Lista de comenzi în ordine secvențială"
                 },
-                "target": {"type": "string", "description": "Mașina țintă (ex: zeus, 11.11.11.119)"},
+                "target": {"type": "string", "description": "Target machine (e.g.: zeus, 192.168.1.1)"},
                 "risk_level": {
                     "type": "string",
                     "enum": ["low", "medium", "high", "critical"],
@@ -864,7 +864,7 @@ def _mask_credentials(text: str) -> str:
     # password=
     text = _re.sub(r'(password=|pass=)\S+', r'***', text)
     # Parole cunoscute
-    for known in ['REDACTED@999', 'REDACTED@9', 'REDACTED']:
+    for known in ['CHANGE_ME_WITH_YOUR_DB_PASSWORD']:
         text = text.replace(known, '***')
     return text
 
