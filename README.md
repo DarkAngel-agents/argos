@@ -92,7 +92,9 @@ This is the laptop/workstation tier — solid for development and light producti
 - RAM: 32GB+
 - Storage: 100GB+ SSD
 - GPU: NVIDIA RTX 3080 10GB VRAM
-- OS: NixOS 25.11 or Fedora 44
+- OS: NixOS 25.11 or Fedora 44 (tested)
+- Future builds planned: Debian 12/13, Ubuntu 22.04/24.04, openSUSE Tumbleweed
+- Community challenge: Linux From Scratch (LFS) — if you manage this, you deserve a medal and a pull request
 
 Runs qwen3:14b locally without breaking a sweat. This is what ARGOS was built and tested on.
 Local inference handles all read-only ops, health checks, and routine tasks for free.
