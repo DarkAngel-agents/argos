@@ -62,6 +62,44 @@ See [ROADMAP.md](ROADMAP.md) for what's coming.
 *Made with love, spite, and pure determination.*
 
 
+
+---
+
+## Hardware Requirements
+
+### Minimum (works, Ollama runs on CPU)
+- CPU: 4 cores, x86_64
+- RAM: 8GB
+- Storage: 40GB
+- GPU: none required
+- OS: Fedora 42+, Debian 12+, Ubuntu 22.04+
+
+At minimum spec, ARGOS uses Claude/Grok API for reasoning and skips local Ollama inference.
+Expect slower responses on complex tasks. Everything else works fine.
+
+### Recommended (what ARGOS was built and tested on)
+- CPU: 8+ cores (Ryzen/Intel 10th gen+)
+- RAM: 32GB
+- Storage: 100GB SSD
+- GPU: NVIDIA RTX 3080 10GB VRAM (or equivalent 8GB+ VRAM)
+- OS: NixOS 25.11 or Fedora 44
+
+With a capable GPU, Ollama runs qwen3:14b locally — free inference for read-only operations,
+health checks, and anything that does not need Claude-level reasoning.
+
+### Two-node setup (production, what runs 24/7 here)
+- Node 1 (Beasty): NixOS, RTX 3080, primary compute + DB + registry
+- Node 2 (Hermes): Debian 13 VM on dedicated server, permanent Swarm Leader
+- PostgreSQL streaming replication with HAProxy auto-failover < 3 seconds
+- DEFCON monitoring on both nodes
+
+### Future — full local autonomous (no external API)
+Truly autonomous operation without Claude/Grok API requires running a large local model
+that can do multi-step reasoning, tool use, and infrastructure decisions reliably.
+We are talking RTX 6000 Ada (48GB VRAM) territory, or a multi-GPU setup.
+
+*I am quite attached to both my kidneys, so this remains a future plan.*
+
 ---
 
 ## Status — v1 Alpha
