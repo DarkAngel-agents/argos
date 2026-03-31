@@ -79,7 +79,7 @@ TOOLS = [
                     "items": {"type": "string"},
                     "description": "Lista de comenzi în ordine secvențială"
                 },
-                "target": {"type": "string", "description": "Target machine (e.g.: zeus, 192.168.1.1)"},
+                "target": {"type": "string", "description": "Mașina țintă (ex: zeus, 11.11.11.119)"},
                 "risk_level": {
                     "type": "string",
                     "enum": ["low", "medium", "high", "critical"],
@@ -431,6 +431,34 @@ async def send_message(req: MessageRequest):
             for tool_use in tool_uses
         ])
         for tool_use, result in zip(tool_uses, results):
+            pass  # tool results processed above
+        # Update working_memory cu pasul curent
+        if pool:
+            try:
+                async with pool.acquire() as conn:
+                    await conn.execute("""
+                        INSERT INTO working_memory (conversation_id, task_current, steps_done, last_update)
+                        VALUES ($1, $2, '[]'::jsonb, NOW())
+                        ON CONFLICT (conversation_id) DO UPDATE SET
+                            task_current = EXCLUDED.task_current,
+                            last_update = NOW()
+                    """, req.conversation_id, str(req.content)[:200])
+                    await conn.execute("""
+                        UPDATE working_memory SET 
+                            steps_done = (
+                                SELECT jsonb_agg(x) FROM (
+                                    SELECT jsonb_array_elements(COALESCE(steps_done,'[]'::jsonb)) x
+                                    UNION ALL SELECT to_jsonb($1::text)
+                                    LIMIT 5 OFFSET GREATEST(0, (jsonb_array_length(COALESCE(steps_done,'[]'::jsonb))+1)-5)
+                                ) sub
+                            ),
+                            last_update = NOW()
+                        WHERE conversation_id = $2 AND status = 'active'
+                    """, f"{tool_uses[0].name if tool_uses else 'unknown'}:{str(results[0])[:50] if results else ''}", 
+                        req.conversation_id)
+            except Exception as wm_err:
+                print(f"[WM ERROR] {wm_err}", flush=True)
+
 
             # Verifica daca s-a cerut stop
             if _stop_requested.get(req.conversation_id):
@@ -514,26 +542,40 @@ async def list_conversations(project_id: Optional[int] = None):
 @router.get("/conversations/{conv_id}/messages")
 async def get_messages(conv_id: int):
     from api.main import pool
-    async with pool.acquire() as conn:
-        rows = await conn.fetch(
-            "SELECT id, role, content, tokens_input, tokens_output, cost_eur, pending, created_at FROM messages WHERE conversation_id = $1 ORDER BY created_at ASC",
-            conv_id
-        )
-    return [dict(r) for r in rows]
+    for attempt in range(3):
+        try:
+            async with pool.acquire() as conn:
+                rows = await conn.fetch(
+                    "SELECT id, role, content, tokens_input, tokens_output, cost_eur, pending, created_at FROM messages WHERE conversation_id = $1 ORDER BY created_at ASC",
+                    conv_id
+                )
+            return [dict(r) for r in rows]
+        except Exception as e:
+            if attempt < 2:
+                await asyncio.sleep(0.5)
+                continue
+            raise
 
 
 @router.get("/conversations/{conv_id}/pending")
 async def get_pending(conv_id: int):
     """Returneaza mesajul pending daca exista - pentru resume dupa refresh"""
     from api.main import pool
-    async with pool.acquire() as conn:
-        row = await conn.fetchrow(
-            "SELECT id, content FROM messages WHERE conversation_id = $1 AND pending = TRUE AND role = 'user' ORDER BY created_at DESC LIMIT 1",
-            conv_id
-        )
-    if row:
-        return {"pending": True, "content": row["content"]}
-    return {"pending": False}
+    for attempt in range(3):
+        try:
+            async with pool.acquire() as conn:
+                row = await conn.fetchrow(
+                    "SELECT id, content FROM messages WHERE conversation_id = $1 AND pending = TRUE AND role = 'user' ORDER BY created_at DESC LIMIT 1",
+                    conv_id
+                )
+            if row:
+                return {"pending": True, "content": row["content"]}
+            return {"pending": False}
+        except Exception as e:
+            if attempt < 2:
+                await asyncio.sleep(0.3)
+                continue
+            return {"pending": False}
 
 
 # ── Tool executor ─────────────────────────────────────────────────────────────
@@ -864,7 +906,7 @@ def _mask_credentials(text: str) -> str:
     # password=
     text = _re.sub(r'(password=|pass=)\S+', r'***', text)
     # Parole cunoscute
-    for known in ['CHANGE_ME_WITH_YOUR_DB_PASSWORD']:
+    for known in ['REDACTED@999', 'REDACTED@9', 'REDACTED']:
         text = text.replace(known, '***')
     return text
 

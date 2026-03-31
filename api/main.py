@@ -93,13 +93,22 @@ async def build_prompt_for_conversation(conversation_id: int, new_message: str) 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global pool, system_prompt
+    import socket
+    is_hermes = socket.gethostname().lower() == 'hermes'
     db_candidates = [
+        (os.getenv("DB_HOST", "11.11.11.111"), int(os.getenv("DB_PORT", 5433))),
+    ] if is_hermes else [
         ("172.17.0.1", 5433),
-        (os.getenv("DB_HOST"), int(os.getenv("DB_PORT", 5433))),
+        (os.getenv("DB_HOST", "11.11.11.111"), int(os.getenv("DB_PORT", 5433))),
     ]
     pool = None
     for db_host, db_port in db_candidates:
         try:
+            async def init_connection(conn):
+                await conn.execute("SET tcp_keepalives_idle = 20")
+                await conn.execute("SET tcp_keepalives_interval = 5")
+                await conn.execute("SET tcp_keepalives_count = 3")
+
             pool = await asyncpg.create_pool(
                 host=db_host,
                 port=db_port,
@@ -109,7 +118,11 @@ async def lifespan(app: FastAPI):
                 ssl=False,
                 min_size=1,
                 max_size=5,
-                timeout=3
+                timeout=3,
+                max_inactive_connection_lifetime=25,
+                command_timeout=60,
+                server_settings={"tcp_keepalives_idle": "20", "tcp_keepalives_interval": "5", "tcp_keepalives_count": "3"},
+                init=init_connection
             )
             print(f"[ARGOS] DB connected via {db_host}:{db_port}", flush=True)
             break
@@ -127,6 +140,21 @@ async def lifespan(app: FastAPI):
         if count:
             await conn.execute("UPDATE messages SET pending = FALSE WHERE pending = TRUE")
             print(f"Cleared {count} pending messages from previous session")
+
+    # Working memory check - anunta daca era ceva in lucru la crash
+    async with pool.acquire() as conn:
+        wm = await conn.fetch(
+            "SELECT id, task_current, steps_done, conversation_id FROM working_memory WHERE status='active' ORDER BY last_update DESC LIMIT 3"
+        )
+        if wm:
+            print(f"[ARGOS] WARNING: {len(wm)} task(s) interrupted at crash:", flush=True)
+            for w in wm:
+                steps = w['steps_done'] or []
+                last_step = steps[-1] if steps else "unknown"
+                print(f"  - Conv {w['conversation_id']}: {str(w['task_current'])[:80]} | last step: {last_step}", flush=True)
+            # Marca ca interrupted, nu sterge
+            await conn.execute("UPDATE working_memory SET status='interrupted' WHERE status='active'")
+
 
     # Health check - restaureaza fisiere lipsa din LTS
     from api.backup import WATCHED_FILES
@@ -162,7 +190,45 @@ async def lifespan(app: FastAPI):
     await pool.close()
     print("DB closed")
 
+
+async def get_pool():
+    """Returneaza pool-ul activ, recreandu-l daca e mort."""
+    global pool
+    if pool is None:
+        return None
+    try:
+        async with pool.acquire() as conn:
+            await conn.fetchval("SELECT 1")
+        return pool
+    except Exception:
+        print("[ARGOS] Pool mort - recreez conexiunea DB...", flush=True)
+        try:
+            pool = await asyncpg.create_pool(
+                host="172.17.0.1", port=5433,
+                user=os.getenv("DB_USER"),
+                password=os.getenv("DB_PASSWORD"),
+                database=os.getenv("DB_NAME"),
+                ssl=False, min_size=1, max_size=5,
+                max_inactive_connection_lifetime=25,
+                command_timeout=60
+            )
+            print("[ARGOS] Pool recreat OK", flush=True)
+        except Exception as e:
+            print(f"[ARGOS] Pool recreat FAIL: {e}", flush=True)
+        return pool
+
+
 app = FastAPI(lifespan=lifespan)
+@app.middleware("http")
+async def catch_db_errors(request, call_next):
+    try:
+        return await call_next(request)
+    except Exception as e:
+        if 'connection' in str(e).lower() or 'ConnectionDoesNotExist' in str(type(e).__name__):
+            print(f"[DB ERROR] {request.url.path} -> {type(e).__name__}: {e}", flush=True)
+        raise
+
+
 
 from api.chat import router as chat_router
 from api.compress import router as compress_router
