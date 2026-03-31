@@ -61,6 +61,18 @@ See [ROADMAP.md](ROADMAP.md) for what's coming.
 
 *Made with love, spite, and pure determination.*
 
+
+---
+
+## Status — v1 Alpha
+
+This is v1 alpha. It works. It runs real infrastructure 24/7.
+But it is not polished, not sanitized for every environment, and v2 will bring radical changes.
+
+**What changes in v2:** complete knowledge architecture redesign (Bubble DB), security compartmentalization with local GPU-only processing for sensitive data, encryption between containers, advanced reasoning engine, PWA mobile app, and full database restructure.
+
+If you install v1 now — migration tools will be provided for v2. No data loss.
+
 ---
 
 ## Development Notes
