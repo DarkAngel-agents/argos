@@ -1,9 +1,43 @@
 # ARGOS — Autonomous Resilient Guardian Orchestration System
 
-> This whole insane ride started because I was sick and tired of NixOS headaches.
-> Because I didn't like some comment on the NixOS forum, I decided to build this as Docker Swarm
-> instead of flake.nix — to keep it compatible with as many people as possible.
-> If starting fresh, I'd recommend Fedora with Plasma 6.
+### Note from DarkAngel — April 1, 2026 (no, not an April Fools joke)
+
+I've reached the point where I started.
+
+ARGOS began with a simple, manual reasoning system. Basic rules: what worked, what didn't,
+success scores per command, grouped by protocol. It was stupid simple and it worked.
+
+Then I got ambitious. Docker Swarm, PostgreSQL replication, HAProxy failover, 142 skills,
+11 prompt modules, heartbeat daemons, error pattern learning, three AI providers with
+automatic routing. All of that is real and it runs 24/7.
+
+But somewhere in the middle of wrestling with streaming replication configs and Swarm
+networking and NixOS driver incompatibilities — I forgot about the foundation. The reasoning.
+
+I let ARGOS learn on its own without giving it the basic rules first.
+Like raising a kid without ever telling him don't run on the carpet because there's
+an 80% chance you'll fall. The result: a system that technically works
+but makes decisions I can't follow and sometimes breaks what was already working.
+
+My fault. I got overwhelmed by the infrastructure complexity — most of which I didn't
+know in depth before this project — and lost sight of where I started.
+
+So here's what's next: I'm going back to basics. Building a manual reasoning core —
+simple, visual, relational rules that I write and control. Not auto-learned. Not AI-generated.
+Human logic, verified by testing, one step at a time.
+
+The system will work differently: instead of "do steps 1 through 10",
+ARGOS gets one step, executes it, reports back, and I decide the next move based on
+what actually happened. Slower, but correct.
+
+I won't be posting updates for a while after the next few urgent fixes.
+I need to find a way to build the reasoning structure visually —
+something I can see and understand as a relational map, not just text in a database.
+
+I hope even in this raw form, this project sparks your interest and imagination
+to think beyond the usual limits.
+
+— DarkAngel
 
 ---
 

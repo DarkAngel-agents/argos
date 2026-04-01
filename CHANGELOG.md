@@ -172,5 +172,23 @@ Prompt V4.8 generated and imported as master skill.
 
 ---
 
+## V4.9 (March 31 — April 1, 2026)
+
+Heartbeat system: 2-second state snapshots from both nodes into heartbeat_log.
+Beasty cpu/mem reports -1 (psutil in container/NixOS — known, not blocking).
+Rules panel in UI: view and edit prompt_modules live.
+Reasoning panel in UI: per-conversation reasoning log with color-coded entries.
+Machine priority fix: ARGOS no longer runs commands on test nodes during reports.
+Credential masking in chat: API keys, JWT tokens, GitHub tokens, passwords
+replaced with dots in the chat view. Full values visible only in reasoning panel.
+Working memory functional: tracks active tasks per conversation.
+142 skills verified. 11 prompt modules active.
+GitHub public repo cleaned and updated.
+
+Junk files removed from repo (empty files created by ARGOS executing
+API responses as shell commands — a reasoning bug, not a code bug).
+
+---
+
 *This is a living system. Every version broke something. Every version fixed more than it broke.*
 *Made with love, spite, and pure determination.*

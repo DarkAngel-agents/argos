@@ -40,6 +40,14 @@ Automatic deduplication and scoring of the skills tree.
 Removes redundant entries, consolidates similar skills, scores by usage and reliability.
 Target: reduce current 129 entries to ~65 high-quality unique skills.
 
+### Reasoning Toggle (Priority)
+Two-level reasoning system:
+- **Local (files)**: Manual, static reasoning rules in ~/.argos/argos-core/reasoning/ — written by human, never auto-modified. Always active. The axioms.
+- **DB (toggle)**: Extended reasoning from database — auto-learned, experimental. Activated via UI toggle for testing.
+
+Toggle OFF = only axioms (safe, predictable). Toggle ON = axioms + DB reasoning (powerful but unverified).
+Goal: human-controlled reasoning foundation that prevents the system from drifting into untraceable logic.
+
 ### Advanced Reasoning Engine
 Restructured multi-step reasoning with explicit chain-of-thought.
 Better decomposition of complex infrastructure problems before acting.
