@@ -2,40 +2,34 @@
 
 ### Note from DarkAngel — April 1, 2026 (no, not an April Fools joke)
 
-I've reached the point where I started.
+Pfff. I've come full circle back to where I started.
 
-ARGOS began with a simple, manual reasoning system. Basic rules: what worked, what didn't,
-success scores per command, grouped by protocol. It was stupid simple and it worked.
+Started with simple manual reasoning — what worked, what didn't, scores per command.
+Stupid simple. Worked great.
 
-Then I got ambitious. Docker Swarm, PostgreSQL replication, HAProxy failover, 142 skills,
-11 prompt modules, heartbeat daemons, error pattern learning, three AI providers with
-automatic routing. All of that is real and it runs 24/7.
+Then I got lost. Docker Swarm, PostgreSQL replication, HAProxy, NixOS driver fights —
+none of which I knew well before this project. I was so deep in making the infrastructure
+work that I forgot to give ARGOS the basic rules. Like, don't run on the carpet,
+you'll fall on your face. That kind of basic.
 
-But somewhere in the middle of wrestling with streaming replication configs and Swarm
-networking and NixOS driver incompatibilities — I forgot about the foundation. The reasoning.
+Result: a system that runs 24/7 but sometimes breaks what was already working
+because its "reasoning" has no foundation. It tries to philosophize about the entire
+context when all it needs to do is execute a command and check if it worked.
 
-I let ARGOS learn on its own without giving it the basic rules first.
-Like raising a kid without ever telling him don't run on the carpet because there's
-an 80% chance you'll fall. The result: a system that technically works
-but makes decisions I can't follow and sometimes breaks what was already working.
+My fault entirely. All the small technical fires made me lose sight of the one thing
+that should have been the foundation from day one.
 
-My fault. I got overwhelmed by the infrastructure complexity — most of which I didn't
-know in depth before this project — and lost sight of where I started.
+The plan: reasoning becomes a base skill — different per operation type.
+Linux admin, programming, network protocols, infrastructure analysis — each gets
+its own ruleset. Like military training: take these unpolished, chaotic recruits
+and drill basic rules into them until they operate with discipline.
+That was always the idea. I just forgot it while putting out fires.
 
-So here's what's next: I'm going back to basics. Building a manual reasoning core —
-simple, visual, relational rules that I write and control. Not auto-learned. Not AI-generated.
-Human logic, verified by testing, one step at a time.
+Going quiet for a while after a few urgent fixes. Need to figure out how to build
+this reasoning visually — something I can see as a relational map, not text in a database.
+A demo video will be attached once I have something worth showing.
 
-The system will work differently: instead of "do steps 1 through 10",
-ARGOS gets one step, executes it, reports back, and I decide the next move based on
-what actually happened. Slower, but correct.
-
-I won't be posting updates for a while after the next few urgent fixes.
-I need to find a way to build the reasoning structure visually —
-something I can see and understand as a relational map, not just text in a database.
-
-I hope even in this raw form, this project sparks your interest and imagination
-to think beyond the usual limits.
+Hope this mess sparks something in your head too.
 
 — DarkAngel
 
