@@ -284,6 +284,8 @@
       <button id="btn-log" onclick="toggleLog()" style="background:transparent;border:1px solid var(--border2);border-radius:4px;padding:4px 10px;color:var(--text3);font-family:'JetBrains Mono',monospace;font-size:10px;cursor:pointer;transition:all .15s" onmouseenter="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseleave="this.style.borderColor='var(--border2)';this.style.color='var(--text3)'">⬡ log</button>
       <button id="btn-jobs" onclick="toggleJobs()" style="background:transparent;border:1px solid var(--border2);border-radius:4px;padding:4px 10px;color:var(--text3);font-family:'JetBrains Mono',monospace;font-size:10px;cursor:pointer;transition:all .15s;position:relative" onmouseenter="this.style.borderColor='var(--yellow)';this.style.color='var(--yellow)'" onmouseleave="this.style.borderColor='var(--border2)';this.style.color='var(--text3)'">⚡ jobs <span id="jobs-badge" style="display:none;position:absolute;top:-4px;right:-4px;background:#f87171;color:#141414;border-radius:50%;width:14px;height:14px;font-size:9px;line-height:14px;text-align:center;font-weight:700"></span></button>
       <span id="activity-dot" style="display:none;width:8px;height:8px;background:#4ade80;border-radius:50%;margin-right:8px;animation:blink 1s infinite;"></span><button id="btn-stop" onclick="stopConversation()" style="display:none;background:#7a1a1a;border:none;border-radius:4px;padding:4px 10px;color:#f87171;font-family:'JetBrains Mono',monospace;font-size:10px;cursor:pointer;">⛔ stop</button>
+      <button onclick="openRules()" style="background:#1a2a3a;border:none;border-radius:4px;padding:4px 10px;color:#60a5fa;font-family:'JetBrains Mono',monospace;font-size:10px;cursor:pointer;margin-left:4px;">⚙ rules</button>
+      <button onclick="openReasoning()" style="background:#1a2a1a;border:none;border-radius:4px;padding:4px 10px;color:#4ade80;font-family:'JetBrains Mono',monospace;font-size:10px;cursor:pointer;margin-left:4px;">🧠 reasoning</button>
       <button id="btn-claude" onclick="toggleProvider('claude')" style="background:#1a1a1a;border:1px solid #22c55e;border-radius:4px;padding:4px 10px;color:#22c55e;font-family:'JetBrains Mono',monospace;font-size:10px;cursor:pointer;font-weight:500;transition:all .15s;">◉ CLAUDE</button>
       <button id="btn-grok" onclick="toggleProvider('grok')" style="background:#1a1a1a;border:1px solid #8b5cf6;border-radius:4px;padding:4px 10px;color:#8b5cf6;font-family:'JetBrains Mono',monospace;font-size:10px;cursor:pointer;font-weight:500;transition:all .15s;">◉ GROK</button>
       <button id="btn-local" onclick="toggleProvider('local')" style="background:#1a1a1a;border:1px solid #f97316;border-radius:4px;padding:4px 10px;color:#f97316;font-family:'JetBrains Mono',monospace;font-size:10px;cursor:pointer;font-weight:500;transition:all .15s;">◉ LOCAL</button>
@@ -401,6 +403,13 @@ let currentConvId=null,estimateTimer=null,lastActivity=Date.now();
 function escapeHtml(t){return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 function formatMessage(text){
   let e=escapeHtml(text);
+  e=e.replace(/sk-ant-[a-zA-Z0-9_-]{10,}/g,'sk-ant-••••••');
+  e=e.replace(/eyJ[a-zA-Z0-9_-]{10,}(?:\.[a-zA-Z0-9_-]+)*/g,'eyJ••••••');
+  e=e.replace(/ghp_[a-zA-Z0-9_]{5,}/g,'ghp_••••••');
+  e=e.replace(/xai-[a-zA-Z0-9_]{5,}/g,'xai-••••••');
+  e=e.replace(/REDACTED@\d+/g,'••••••');
+  e=e.replace(/(ANTHROPIC_API_KEY|HA_TOKEN|DB_PASSWORD|GITHUB_TOKEN|GROK_API_KEY|OLLAMA_KEY|SECRET)[=|:]\s*`?[^`\s<|]{6,}/gi,function(m){return m.split(/[=|:]/)[0]+'=••••••';});
+  e=e.replace(/password[=|:]\s*`?[^`\s<|]{6,}/gi,'password=••••••');
   e=e.replace(/```[\w]*\n?([\s\S]*?)```/g,(_,c)=>`<pre><code>${c.trim()}</code></pre>`);
   e=e.replace(/`([^`]+)`/g,(_,c)=>`<code>${c}</code>`);
   return e;
@@ -1275,6 +1284,77 @@ async function toggleProvider(name) {
 }
 
 loadProviders();
+
+
+// ── Rules Panel ────────────────────────────────────────────────────────────
+function closePopup(){var p=document.getElementById("argos-popup");if(p)p.remove();}
+async function openRules() {
+  const res = await fetch(`${API}/prompt-modules`);
+  const modules = await res.json();
+  
+  let html = '<div id="argos-popup" style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.85);z-index:9999;overflow:auto;padding:20px;">';
+  html += '<div style="max-width:900px;margin:0 auto;background:#1a1a1a;border:1px solid #333;border-radius:8px;padding:20px;">';
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">';
+  html += '<h2 style="color:#60a5fa;font-family:JetBrains Mono,monospace;font-size:14px;margin:0;">⚙ PROMPT MODULES</h2>';
+  html += '<button onclick="closePopup()" style="background:#333;border:none;color:#aaa;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:12px;">✕ close</button>';
+  html += '</div>';
+  
+  modules.forEach(m => {
+    const active = m.active ? '#4ade80' : '#f87171';
+    html += `<div style="margin-bottom:12px;border:1px solid #333;border-radius:6px;padding:12px;">`;
+    html += `<div style="display:flex;justify-content:space-between;margin-bottom:8px;">`;
+    html += `<span style="color:${active};font-family:JetBrains Mono,monospace;font-size:11px;font-weight:bold;">${m.name} [priority:${m.priority}]</span>`;
+    html += `<span style="color:#666;font-size:10px;">${m.active ? 'active' : 'inactive'}</span>`;
+    html += `</div>`;
+    html += `<textarea id="mod-${m.id}" style="width:100%;background:#111;color:#ccc;border:1px solid #333;border-radius:4px;padding:8px;font-family:JetBrains Mono,monospace;font-size:10px;resize:vertical;min-height:80px;box-sizing:border-box;">${m.content}</textarea>`;
+    html += `<button onclick="saveModule(${m.id})" style="margin-top:6px;background:#1a3a2a;border:1px solid #4ade80;color:#4ade80;padding:4px 12px;border-radius:4px;cursor:pointer;font-size:10px;font-family:JetBrains Mono,monospace;">Save</button>`;
+    html += `</div>`;
+  });
+  
+  html += '</div></div>';
+  document.body.insertAdjacentHTML('beforeend', html);
+}
+
+async function saveModule(id) {
+  const content = document.getElementById(`mod-${id}`).value;
+  const res = await fetch(`${API}/prompt-modules/${id}`, {
+    method: 'PATCH',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({content})
+  });
+  if(res.ok) alert('Saved!');
+  else alert('Error saving');
+}
+
+// ── Reasoning Panel ─────────────────────────────────────────────────────────
+async function openReasoning() {
+  if(!currentConvId) { alert('No active conversation'); return; }
+  
+  const res = await fetch(`${API}/conversations/${currentConvId}/reasoning`);
+  const data = await res.json();
+  
+  let html = '<div id="argos-popup" style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.85);z-index:9999;overflow:auto;padding:20px;">';
+  html += '<div style="max-width:900px;margin:0 auto;background:#1a1a1a;border:1px solid #333;border-radius:8px;padding:20px;">';
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">';
+  html += '<h2 style="color:#4ade80;font-family:JetBrains Mono,monospace;font-size:14px;margin:0;">🧠 REASONING LOG</h2>';
+  html += '<button onclick="closePopup()" style="background:#333;border:none;color:#aaa;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:12px;">✕ close</button>';
+  html += '</div>';
+  
+  if(!data.length) {
+    html += '<p style="color:#666;font-family:JetBrains Mono,monospace;font-size:11px;">No reasoning data yet. Send a message first.</p>';
+  } else {
+    data.forEach(r => {
+      const color = r.type === 'tool_call' ? '#f59e0b' : r.type === 'module' ? '#60a5fa' : '#4ade80';
+      html += `<div style="margin-bottom:8px;padding:8px;background:#111;border-left:3px solid ${color};border-radius:0 4px 4px 0;">`;
+      html += `<div style="color:${color};font-family:JetBrains Mono,monospace;font-size:10px;font-weight:bold;">${r.type.toUpperCase()} — ${r.ts || ''}</div>`;
+      html += `<div style="color:#ccc;font-family:JetBrains Mono,monospace;font-size:10px;margin-top:4px;white-space:pre-wrap;">${r.content}</div>`;
+      html += `</div>`;
+    });
+  }
+  
+  html += '</div></div>';
+  document.body.insertAdjacentHTML('beforeend', html);
+}
 
 </script>
 </body>
