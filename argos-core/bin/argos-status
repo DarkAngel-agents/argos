@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+BASE="http://localhost:8000"
+echo "=== ARGOS STATUS ==="
+systemctl is-active --quiet argos && echo "  ✓ argos.service" || echo "  ✗ argos.service DOWN"
+systemctl is-active --quiet cristin-collector && echo "  ✓ cristin-collector" || echo "  ! cristin-collector off"
+curl -s http://localhost:11434/api/tags &>/dev/null && echo "  ✓ ollama" || echo "  ! ollama off"
+curl -s "$BASE/health" | python3.13 -c "import sys,json; d=json.load(sys.stdin); print(f'  ✓ API ok ({d.get(\"prompt_modules\",\"?\")} modules)')" 2>/dev/null || echo "  ✗ API down"
+LAST=$(ls -t ~/.argos/backups/db/*.sql.gz 2>/dev/null | head -1)
+[ -n "$LAST" ] && AGE=$(( ($(date +%s) - $(stat -c %Y "$LAST")) / 3600 )) && echo "  ✓ DB backup ${AGE}h ago" || echo "  ! fara backup DB"
+echo "=== END ==="

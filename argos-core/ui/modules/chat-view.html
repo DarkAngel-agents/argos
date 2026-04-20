@@ -1,0 +1,53 @@
+<div class="chat-view" x-data="chatView()" x-init="init()">
+  <header class="chat-view-header">
+    <div class="chat-view-title">
+      <span class="conv-id">#<span x-text="convId"></span></span>
+      <span class="conv-status" x-text="loading ? 'loading...' : `${messages.length} mesaje`"></span>
+    </div>
+    <div class="chat-view-actions">
+      <button class="btn-icon" @click="refresh()" title="Refresh">↻</button>
+    </div>
+  </header>
+
+  <div class="chat-messages" id="chat-messages-container" x-ref="msgContainer">
+    <template x-if="loading && messages.length === 0">
+      <div class="chat-loading">Se incarca mesajele...</div>
+    </template>
+    <template x-if="!loading && messages.length === 0">
+      <div class="chat-empty">Nu sunt mesaje in aceasta conversatie.</div>
+    </template>
+    <template x-for="msg in messages" :key="msg.id">
+      <div class="chat-msg" :class="`msg-${msg.role}`">
+        <div class="msg-meta">
+          <span class="msg-role" x-text="msg.role"></span>
+          <span class="msg-time" x-text="formatTs(msg.created_at)"></span>
+        </div>
+        <div class="msg-content" x-html="renderMd(msg.content)"></div>
+      </div>
+    </template>
+    <template x-if="pendingSpinner">
+      <div class="chat-msg msg-assistant msg-pending">
+        <div class="msg-meta"><span class="msg-role">assistant</span></div>
+        <div class="msg-content"><span class="spinner-dots">ARGOS lucreaza<span>.</span><span>.</span><span>.</span></span></div>
+      </div>
+    </template>
+  </div>
+
+  <footer class="chat-input-area">
+    <textarea
+      x-model="draft"
+      x-ref="draftInput"
+      placeholder="Scrie un mesaj... (Enter pentru trimitere, Shift+Enter pentru rand nou)"
+      @keydown.enter.prevent="if(!$event.shiftKey) send()"
+      :disabled="sending"
+      rows="2"
+    ></textarea>
+    <div class="chat-input-bar">
+      <span class="char-count" x-text="draft.length + ' chars'"></span>
+      <button class="btn-send" @click="send()" :disabled="sending || !draft.trim()">
+        <span x-show="!sending">Trimite</span>
+        <span x-show="sending">Se trimite...</span>
+      </button>
+    </div>
+  </footer>
+</div>

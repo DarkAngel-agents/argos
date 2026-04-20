@@ -1,0 +1,220 @@
+#!/usr/bin/env python3
+import sqlite3, sys, os
+
+DB = os.path.expanduser("~/.argos/claude-memory.db")
+
+def query(sql, params=()):
+    conn = sqlite3.connect(DB)
+    conn.row_factory = sqlite3.Row
+    rows = conn.execute(sql, params).fetchall()
+    conn.close()
+    return rows
+
+def show(rows):
+    if not rows: print("(no results)"); return
+    for r in rows:
+        print(" | ".join(str(v) for v in r))
+        print()
+
+cmd = sys.argv[1] if len(sys.argv) > 1 else "help"
+arg = sys.argv[2] if len(sys.argv) > 2 else ""
+
+if cmd == "context":
+    show(query("SELECT module, status, summary, updated FROM context ORDER BY module"))
+
+elif cmd == "commands":
+    if arg:
+        show(query("SELECT id, description, command, notes FROM commands WHERE category=? OR description LIKE ? ORDER BY category", (arg, f"%{arg}%")))
+    else:
+        show(query("SELECT id, category, description FROM commands ORDER BY category"))
+
+elif cmd == "cmd":
+    show(query("SELECT command, notes FROM commands WHERE id=?", (arg,)))
+
+elif cmd == "ideas":
+    if arg:
+        show(query("SELECT id, title, status, priority FROM ideas WHERE category=? OR status=? ORDER BY priority", (arg, arg)))
+    else:
+        show(query("SELECT id, category, title, priority, status FROM ideas ORDER BY priority"))
+
+elif cmd == "decisions":
+    show(query("SELECT topic, chosen, reason FROM decisions ORDER BY id"))
+
+elif cmd == "sessions":
+    show(query("SELECT id, date, title FROM sessions ORDER BY id DESC LIMIT 10"))
+
+elif cmd == "session":
+    show(query("SELECT * FROM sessions WHERE id=?", (arg,)))
+
+elif cmd == "search":
+    results = []
+    for t in ["commands", "ideas", "decisions", "context", "sessions"]:
+        rows = query(f"SELECT '{t}' as tbl, id, * FROM {t} WHERE command LIKE ? OR description LIKE ? OR summary LIKE ? OR content LIKE ? OR title LIKE ? OR topic LIKE ? OR chosen LIKE ?",
+                    tuple([f"%{arg}%"]*7))
+        results.extend(rows)
+    show(results)
+
+elif cmd == "add-cmd":
+    # argos-memory add-cmd category "description" "command" "notes"
+    parts = sys.argv[2:]
+    if len(parts) < 3: print("Usage: argos-memory add-cmd CATEGORY DESCRIPTION COMMAND [NOTES]"); sys.exit(1)
+    conn = sqlite3.connect(DB)
+    conn.execute("INSERT INTO commands (category,description,command,notes) VALUES (?,?,?,?)",
+                 (parts[0], parts[1], parts[2], parts[3] if len(parts)>3 else None))
+    conn.commit(); conn.close()
+    print("OK")
+
+elif cmd == "add-idea":
+    parts = sys.argv[2:]
+    if len(parts) < 3: print("Usage: argos-memory add-idea CATEGORY TITLE CONTENT [PRIORITY]"); sys.exit(1)
+    conn = sqlite3.connect(DB)
+    conn.execute("INSERT INTO ideas (category,title,content,priority) VALUES (?,?,?,?)",
+                 (parts[0], parts[1], parts[2], int(parts[3]) if len(parts)>3 else 3))
+    conn.commit(); conn.close()
+    print("OK")
+
+elif cmd == "add-session":
+    parts = sys.argv[2:]
+    if len(parts) < 2: print("Usage: argos-memory add-session TITLE SUMMARY [ACCOMPLISHED] [PENDING]"); sys.exit(1)
+    conn = sqlite3.connect(DB)
+    conn.execute("INSERT INTO sessions (title,summary,accomplished,pending) VALUES (?,?,?,?)",
+                 (parts[0], parts[1], parts[2] if len(parts)>2 else None, parts[3] if len(parts)>3 else None))
+    conn.commit(); conn.close()
+    print("OK")
+
+elif cmd == "update-context":
+    parts = sys.argv[2:]
+    if len(parts) < 3: print("Usage: argos-memory update-context MODULE STATUS SUMMARY"); sys.exit(1)
+    conn = sqlite3.connect(DB)
+    conn.execute("INSERT INTO context (module,status,summary) VALUES (?,?,?) ON CONFLICT DO NOTHING", (parts[0],parts[1],parts[2]))
+    conn.execute("UPDATE context SET status=?, summary=?, updated=date('now') WHERE module=?", (parts[1],parts[2],parts[0]))
+    conn.commit(); conn.close()
+    print("OK")
+
+
+elif cmd == "add-skill":
+    parts = sys.argv[2:]
+    if len(parts) < 4: print("Usage: argos-memory add-skill CHAT_NAME CATEGORY TITLE CONTEXT CONTENT"); sys.exit(1)
+    conn = sqlite3.connect(DB)
+    conn.execute("INSERT INTO claude_skills (chat_name,category,title,context,content) VALUES (?,?,?,?,?)",
+                 (parts[0], parts[1], parts[2], parts[3], parts[4] if len(parts)>4 else parts[3]))
+    conn.commit(); conn.close()
+    print("OK")
+
+elif cmd == "skills-pending":
+    show(query("SELECT id, chat_name, category, title, date FROM claude_skills WHERE status='pending' ORDER BY date DESC"))
+
+elif cmd == "export-skills":
+    rows = query("SELECT id, title, context, content FROM claude_skills WHERE status='pending'")
+    if not rows:
+        print("No pending skills.")
+    else:
+        out = []
+        ids = []
+        for r in rows:
+            out.append(f"---SKILL---")
+            out.append(f"title: {r['title']}")
+            out.append(f"context: {r['context']}")
+            out.append(f"content: |")
+            for line in r['content'].splitlines():
+                out.append(f"  {line}")
+            out.append(f"---SKILL---")
+            out.append("")
+            ids.append(r['id'])
+        path = os.path.expanduser("~/.argos/argos-core/skills/import/claude-memory-export.argosdb")
+        with open(path, 'w') as f:
+            f.write("\n".join(out))
+        # Mark as exported
+        conn = sqlite3.connect(DB)
+        conn.execute(f"UPDATE claude_skills SET status='exported' WHERE id IN ({','.join('?'*len(ids))})", ids)
+        conn.commit(); conn.close()
+        print(f"Exported {len(ids)} skills to {path}")
+        print("Run: argos-import-skills")
+
+
+elif cmd == "projects":
+    show(query("SELECT name, status, prompt_version, updated FROM projects ORDER BY CASE status WHEN 'active' THEN 1 WHEN 'paused' THEN 2 ELSE 3 END, name"))
+
+elif cmd == "project":
+    if not arg:
+        print("Usage: argos-memory project NAME")
+    else:
+        rows = query("SELECT * FROM projects WHERE name LIKE ?", (f"%{arg}%",))
+        if rows:
+            r = rows[0]
+            print(f"PROJECT: {r['name']} [{r['status']}] v{r['prompt_version']}")
+            print(f"\nDESCRIPTION:\n{r['description']}")
+            print(f"\nCONTEXT:\n{r['context']}")
+            print(f"\nCOMENZI DE CONTINUARE:\n{r['continuation_commands']}")
+        else:
+            print(f"Project '{arg}' not found")
+
+elif cmd == "continue":
+    arg = arg or "ARGOS"
+    rows = query("SELECT * FROM projects WHERE name LIKE ? AND status='active'", (f"%{arg}%",))
+    if rows:
+        r = rows[0]
+        print(f"# CONTINUE {r['name']} v{r['prompt_version']}")
+        print(f"# {r['description']}")
+        print(f"\n## RULEAZA IN CONSOLA:")
+        print(r['continuation_commands'])
+        print(f"\n## CONTEXT:")
+        print(r['context'])
+    else:
+        print(f"No active project matching '{arg}'")
+
+elif cmd == "add-chat-link":
+    parts = sys.argv[2:]
+    if len(parts) < 3:
+        print("Usage: argos-memory add-chat-link PROJECT TITLE URL [SUMMARY]")
+    else:
+        conn = sqlite3.connect(DB)
+        conn.execute("INSERT INTO conversation_links (project_name,chat_title,chat_url,summary) VALUES (?,?,?,?)",
+                    (parts[0], parts[1], parts[2], parts[3] if len(parts)>3 else None))
+        conn.commit(); conn.close()
+        print("OK")
+
+elif cmd == "chat-links":
+    show(query("SELECT project_name, chat_title, chat_url, date FROM conversation_links WHERE project_name LIKE ? ORDER BY date DESC",
+               (f"%{arg}%" if arg else "%",)))
+
+elif cmd == "update-project":
+    parts = sys.argv[2:]
+    if len(parts) < 3:
+        print("Usage: argos-memory update-project NAME FIELD VALUE")
+    else:
+        name, field, value = parts[0], parts[1], parts[2]
+        allowed = ['status','prompt_version','context','continuation_commands','description']
+        if field not in allowed:
+            print(f"Field must be one of: {allowed}")
+        else:
+            conn = sqlite3.connect(DB)
+            conn.execute(f"UPDATE projects SET {field}=?, updated=date('now') WHERE name=?", (value, name))
+            conn.commit(); conn.close()
+            print("OK")
+
+else:
+    print("""argos-memory - Claude session memory
+
+QUERY:
+  argos-memory context              - starea tuturor modulelor
+  argos-memory commands [category]  - comenzi (toate sau pe categorie)
+  argos-memory cmd ID               - comanda exacta dupa ID
+  argos-memory ideas [category]     - idei (toate sau pe categorie)
+  argos-memory decisions            - decizii arhitecturale
+  argos-memory sessions             - ultimele 10 sesiuni
+  argos-memory session ID           - sesiune completa
+  argos-memory search KEYWORD       - cauta in tot
+
+WRITE:
+  argos-memory add-cmd CAT DESC CMD [NOTES]
+  argos-memory add-idea CAT TITLE CONTENT [PRIORITY]
+  argos-memory add-session TITLE SUMMARY [ACCOMPLISHED] [PENDING]
+  argos-memory update-context MODULE STATUS SUMMARY
+
+Categories comenzi: health swarm build db defcon skills git recovery env logs
+Categories idei: architecture security features
+
+  argos-memory add-skill CHAT CATEGORY TITLE CONTEXT CONTENT
+  argos-memory skills-pending        - skills asteptand import in ARGOS
+  argos-memory export-skills         - genereaza .argosdb si trimite la import""")

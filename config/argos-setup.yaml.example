@@ -1,0 +1,31 @@
+# ARGOS Setup Configuration
+# Fill in all fields marked as REQUIRED, then run: bash setup.sh
+# This file will be DELETED after successful setup — your data moves to the database
+# A backup copy is kept at: ~/.argos/config/argos-private.yaml
+
+# === USER (REQUIRED) ===
+username: your_linux_username
+language: en                    # language for ARGOS responses: en, ro, fr, de, es...
+
+# === AI PROVIDERS ===
+claude_token: sk-ant-...        # REQUIRED — get from: platform.anthropic.com
+grok_token: xai-...             # optional — get from: console.x.ai
+
+# === DATABASE (REQUIRED) ===
+db_password: choose_a_strong_password
+
+# === NETWORK (REQUIRED) ===
+hostname: your_hostname         # this machine hostname (e.g. beasty)
+
+# === SECONDARY NODE (optional) ===
+# secondary_hostname: hermes
+# secondary_ip: 192.168.1.x
+
+# === HOME ASSISTANT (optional) ===
+# Status: skill included but not yet trained — coming very soon
+# ha_url: https://your-ha-ip:8123
+# ha_token: your-long-lived-token
+
+# === GITHUB (optional — required for argos-export-github-public.sh) ===
+# github_token: ghp_...
+# github_repo: yourusername/argos

@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+BASE=~/.argos/argos-core
+BACKUP_DIR=~/.argos/backups/lts-$(date +%Y%m%d-%H%M)
+mkdir -p "$BACKUP_DIR"
+
+MODULES=(
+  "api/chat.py"
+  "api/main.py"
+  "api/executor.py"
+  "api/vms.py"
+  "api/jobs.py"
+  "api/backup.py"
+  "api/compress.py"
+  "api/local_executor.py"
+  "api/iso_builder.py"
+  "api/archives.py"
+  "api/nanite.py"
+  "api/code_runner.py"
+  "ui/index.html"
+  "config/system_prompt.txt"
+  "nixos/configuration.nix"
+)
+
+echo "[ARGOS-BACKUP] Backup in $BACKUP_DIR"
+OK=0; FAIL=0
+for m in "${MODULES[@]}"; do
+  src="$BASE/$m"
+  dst="$BACKUP_DIR/$m"
+  mkdir -p "$(dirname $dst)"
+  if cp "$src" "$dst" 2>/dev/null; then
+    echo "  ✓ $m"
+    OK=$((OK+1))
+  else
+    echo "  ✗ $m — MISSING: $src"
+    FAIL=$((FAIL+1))
+  fi
+done
+
+# DB dump
+echo "  [DB] Dumping claudedb..."
+if docker exec argos-db pg_dump -U claude claudedb > "$BACKUP_DIR/claudedb.sql" 2>/dev/null; then
+  echo "  ✓ claudedb.sql"
+else
+  echo "  ✗ claudedb.sql — docker exec failed (run from host)"
+fi
+
+echo "[ARGOS-BACKUP] Done: $OK ok, $FAIL fail — $(du -sh $BACKUP_DIR | cut -f1)"

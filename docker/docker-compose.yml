@@ -1,0 +1,22 @@
+services:
+  argos-1:
+    image: argos:latest
+    container_name: argos-1
+    restart: unless-stopped
+    working_dir: /home/darkangel/.argos/argos-core
+    env_file:
+      - /root/.argos.env
+    environment:
+      DB_HOST: 172.17.0.1
+      DB_PORT: 5433
+    volumes:
+      - /home/darkangel/.argos/argos-core:/home/darkangel/.argos/argos-core
+      - /home/darkangel/.argos/backups:/backups
+      - /home/darkangel/.ssh:/home/argos/.ssh:ro
+    ports:
+      - "666:8000"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3

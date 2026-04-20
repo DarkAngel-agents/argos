@@ -1,0 +1,27 @@
+services:
+  argos:
+    image: 11.11.11.111:5000/argos:latest
+    deploy:
+      replicas: 2
+      restart_policy:
+        condition: on-failure
+        delay: 2s
+        max_attempts: 3
+      update_config:
+        order: start-first
+        failure_action: rollback
+
+    working_dir: /home/darkangel/.argos/argos-core
+    env_file:
+      - /root/.argos.env
+    volumes:
+      - /home/darkangel/.argos/argos-core:/home/darkangel/.argos/argos-core
+      - /home/darkangel/.argos/backups:/backups
+      - /home/darkangel/.ssh:/home/argos/.ssh:ro
+    ports:
+      - "666:8000"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3

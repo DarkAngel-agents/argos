@@ -1,0 +1,110 @@
+<div class="module module-reasoning"
+     x-data="reasoningModule()"
+     x-init="loadConvs()">
+
+  <div class="mod-header">
+    <h2 class="mod-title">REASONING</h2>
+    <button type="button" class="mod-refresh" @click="loadEntries()" :disabled="loading || !selected">
+      <span x-show="!loading">↻ refresh</span>
+      <span x-show="loading">incarc...</span>
+    </button>
+  </div>
+
+  <div x-show="error" class="mod-error" x-text="error"></div>
+
+  <div class="reasoning-controls">
+    <label class="reasoning-label">conversatie:</label>
+    <select class="reasoning-select" x-model="selected" @change="loadEntries()">
+      <option value="">— alege —</option>
+      <template x-for="c in conversations" :key="c.id">
+        <option :value="c.id" x-text="'#' + c.id + ' ' + (c.title || '(fara titlu)')"></option>
+      </template>
+    </select>
+    <span class="reasoning-count" x-show="entries.length > 0">
+      <b x-text="entries.length"></b> entries
+    </span>
+  </div>
+
+  <div class="reasoning-timeline" x-show="selected && !loading">
+    <template x-for="(e, i) in entries" :key="i">
+      <div class="reasoning-row" :class="'type-' + e.type">
+        <div class="reasoning-marker">
+          <span class="reasoning-dot"></span>
+          <span class="reasoning-line" x-show="i < entries.length - 1"></span>
+        </div>
+        <div class="reasoning-body">
+          <div class="reasoning-meta">
+            <span class="reasoning-type" x-text="e.type"></span>
+            <span class="reasoning-ts" x-text="formatTs(e.ts)"></span>
+          </div>
+          <div class="reasoning-content" x-text="e.content"></div>
+        </div>
+      </div>
+    </template>
+    <div x-show="entries.length === 0 && selected" class="nodata">
+      nici un entry pentru aceasta conversatie
+    </div>
+  </div>
+
+  <div x-show="!selected" class="nodata" style="margin-top: 24px;">
+    alege o conversatie din dropdown pentru a vedea reasoning timeline
+  </div>
+</div>
+
+<script>
+function reasoningModule() {
+  return {
+    conversations: [],
+    selected: '',
+    entries: [],
+    loading: false,
+    error: null,
+
+    async loadConvs() {
+      try {
+        const r = await fetch('/api/conversations');
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const data = await r.json();
+        this.conversations = (Array.isArray(data) ? data : (data.conversations || []))
+          .sort((a, b) => (b.updated_at || '').localeCompare(a.updated_at || ''));
+        // Default: prima conversatie (cea mai recent updated)
+        if (this.conversations.length > 0 && !this.selected) {
+          this.selected = this.conversations[0].id;
+          this.loadEntries();
+        }
+      } catch (e) {
+        this.error = 'eroare load conversatii: ' + e.message;
+      }
+    },
+
+    async loadEntries() {
+      if (!this.selected) return;
+      this.loading = true;
+      this.error = null;
+      try {
+        const r = await fetch('/api/conversations/' + this.selected + '/reasoning');
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const data = await r.json();
+        // Endpoint returneaza lista direct (nu wrapped)
+        this.entries = Array.isArray(data) ? data : (data.entries || data.reasoning || []);
+      } catch (e) {
+        this.error = 'eroare load reasoning: ' + e.message;
+        this.entries = [];
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    formatTs(ts) {
+      if (!ts) return '-';
+      try {
+        const d = new Date(ts);
+        return d.toLocaleString('ro-RO', {
+          month: '2-digit', day: '2-digit',
+          hour: '2-digit', minute: '2-digit', second: '2-digit'
+        });
+      } catch (e) { return ts; }
+    }
+  };
+}
+</script>

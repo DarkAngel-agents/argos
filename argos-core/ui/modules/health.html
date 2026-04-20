@@ -1,0 +1,160 @@
+<div class="module module-health"
+     x-data="healthModule()"
+     x-init="loadSnapshot()">
+
+  <div class="mod-header">
+    <h2 class="mod-title">HEALTH</h2>
+    <button type="button" class="mod-refresh" @click="loadSnapshot()" :disabled="loading">
+      <span x-show="!loading">↻ refresh</span>
+      <span x-show="loading">incarc...</span>
+    </button>
+  </div>
+
+  <div x-show="error" class="mod-error" x-text="error"></div>
+
+  <div class="health-summary" x-show="data">
+    <span><b x-text="data?.counts?.total ?? 0"></b> services</span>
+    <span class="dot ok"></span><b x-text="data?.counts?.ok ?? 0"></b> ok
+    <span class="dot warn"></span><b x-text="data?.counts?.warn ?? 0"></b> warn
+    <span class="dot error"></span><b x-text="data?.counts?.error ?? 0"></b> error
+    <span class="dot unknown"></span><b x-text="data?.counts?.unknown ?? 0"></b> unknown
+    <span class="health-source" x-text="'source: ' + (data?.source || '?')"></span>
+  </div>
+
+  <div class="health-nodes" x-show="data">
+    <template x-for="(items, node) in (data?.by_node || {})" :key="node">
+      <div class="health-node-block">
+        <div class="health-node-header">
+          <span class="dot" :class="nodeStatus(items)"></span>
+          <span class="health-node-name" x-text="node"></span>
+          <span class="health-node-count" x-text="items.length + ' service(s)'"></span>
+        </div>
+        <div class="health-services">
+          <template x-for="svc in items" :key="svc.id">
+            <div class="health-svc" :class="'status-' + svc.status"
+                 @click="selectService(node, svc.service)">
+              <div class="health-svc-name">
+                <span class="dot" :class="svc.status"></span>
+                <span x-text="svc.service"></span>
+              </div>
+              <div class="health-svc-metrics">
+                <span x-show="svc.cpu_pct !== null" class="metric">
+                  cpu <b x-text="(svc.cpu_pct >= 0 ? svc.cpu_pct.toFixed(1) : '?') + '%'"></b>
+                </span>
+                <span x-show="svc.mem_pct !== null" class="metric">
+                  mem <b x-text="svc.mem_pct.toFixed(1) + '%'"></b>
+                </span>
+                <span x-show="svc.db_latency_ms !== null" class="metric">
+                  db <b x-text="svc.db_latency_ms + 'ms'"></b>
+                </span>
+                <span x-show="svc.containers_up !== null" class="metric">
+                  ctr <b x-text="svc.containers_up"></b>
+                </span>
+              </div>
+              <div class="health-svc-meta">
+                <span class="health-svc-ts" x-text="formatAge(svc.ts)"></span>
+                <span x-show="svc.error_msg" class="health-svc-err" x-text="svc.error_msg"></span>
+              </div>
+            </div>
+          </template>
+        </div>
+      </div>
+    </template>
+    <div x-show="(data?.items || []).length === 0" class="nodata">
+      nici un heartbeat in log
+    </div>
+  </div>
+
+  <!-- DRILL-DOWN: log history pentru serviciul selectat -->
+  <div x-show="selected" class="health-drilldown">
+    <div class="drill-header">
+      <h3>HISTORY: <span x-text="selected"></span></h3>
+      <button type="button" class="drill-close" @click="selected = null; logEntries = []">✕ inchide</button>
+    </div>
+    <div x-show="logLoading" class="nodata">incarc istoric...</div>
+    <div class="drill-list" x-show="!logLoading && logEntries.length > 0">
+      <template x-for="e in logEntries" :key="e.id">
+        <div class="drill-row" :class="'status-' + e.status">
+          <span class="dot" :class="e.status"></span>
+          <span class="drill-ts" x-text="formatTime(e.ts)"></span>
+          <span class="drill-metric">cpu <b x-text="(e.cpu_pct >= 0 ? e.cpu_pct.toFixed(1) : '?')"></b>%</span>
+          <span class="drill-metric">mem <b x-text="e.mem_pct?.toFixed(1)"></b>%</span>
+          <span class="drill-metric">db <b x-text="e.db_latency_ms"></b>ms</span>
+          <span class="drill-metric">ctr <b x-text="e.containers_up"></b></span>
+        </div>
+      </template>
+    </div>
+  </div>
+</div>
+
+<script>
+function healthModule() {
+  return {
+    data: null,
+    loading: false,
+    error: null,
+    selected: null,
+    logEntries: [],
+    logLoading: false,
+
+    async loadSnapshot() {
+      this.loading = true;
+      this.error = null;
+      try {
+        const r = await fetch('/api/health/snapshot');
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        this.data = await r.json();
+      } catch (e) {
+        this.error = 'eroare incarcare snapshot: ' + e.message;
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    async selectService(node, service) {
+      this.selected = node + '/' + service;
+      this.logLoading = true;
+      this.logEntries = [];
+      try {
+        const r = await fetch('/api/health/log?node=' + encodeURIComponent(node) + '&service=' + encodeURIComponent(service) + '&limit=50');
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const data = await r.json();
+        this.logEntries = data.log || [];
+      } catch (e) {
+        this.error = 'eroare incarcare history: ' + e.message;
+      } finally {
+        this.logLoading = false;
+      }
+    },
+
+    nodeStatus(items) {
+      if (items.some(i => i.status === 'error')) return 'error';
+      if (items.some(i => i.status === 'warn'))  return 'warn';
+      if (items.every(i => i.status === 'ok'))   return 'ok';
+      return 'unknown';
+    },
+
+    formatTime(iso) {
+      if (!iso) return '-';
+      try {
+        return new Date(iso).toLocaleString('ro-RO', {
+          month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'
+        });
+      } catch (e) { return iso; }
+    },
+
+    formatAge(iso) {
+      if (!iso) return '-';
+      try {
+        const d = new Date(iso);
+        const diff = (new Date() - d) / 1000;
+        if (diff < 5)    return 'live';
+        if (diff < 60)   return Math.floor(diff) + 's';
+        if (diff < 3600) return Math.floor(diff / 60) + 'm';
+        if (diff < 86400)return Math.floor(diff / 3600) + 'h';
+        return Math.floor(diff / 86400) + 'z';
+      } catch (e) { return iso; }
+    }
+  };
+}
+</script>

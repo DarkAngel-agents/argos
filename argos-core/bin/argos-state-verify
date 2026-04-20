@@ -1,0 +1,423 @@
+#!/usr/bin/env python3.13
+"""
+argos-state-verify - verifica starea reala a infrastructurii ARGOS si
+genereaza /tmp/argos_settings_seed.sql pentru popularea tabelei `settings`.
+
+Ruleaza pe Beasty. Presupune ALTER TABLE settings deja aplicat.
+NU scrie in DB - doar genereaza fisier SQL pentru review + rulare manuala.
+
+Error codes: E001 timeout | E002 subprocess fail | E003 parse fail | E004 user abort
+"""
+import subprocess, sys, os
+from dataclasses import dataclass, field
+from typing import Callable, Optional
+
+SSH_HERMES = ["ssh", "-o", "ConnectTimeout=5", "-o", "BatchMode=yes", "root@11.11.11.98"]
+DOCKER_DB = ["docker", "exec", "argos-db", "psql", "-U", "claude", "-d", "claudedb", "-tAc"]
+CHAT_PY = "/home/darkangel/.argos/argos-core/api/chat.py"
+PARSER_BIN = "/home/darkangel/.argos/argos-core/bin/argos-file-indexer"
+REASONING_DIR = "/home/darkangel/.argos/argos-core/reasoning"
+OUTPUT_SQL = "/tmp/argos_settings_seed.sql"
+
+if sys.stdout.isatty():
+    G, Y, R, B, BOLD, RST = "\033[92m", "\033[93m", "\033[91m", "\033[94m", "\033[1m", "\033[0m"
+else:
+    G = Y = R = B = BOLD = RST = ""
+
+HERMES_DOWN = False
+
+def run(cmd, timeout=10):
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        return r.returncode, r.stdout.strip(), r.stderr.strip()
+    except subprocess.TimeoutExpired:
+        return 124, "", f"[E001] timeout {timeout}s"
+    except FileNotFoundError as e:
+        return 127, "", f"[E002] not found: {e}"
+    except Exception as e:
+        return 1, "", f"[E002] {type(e).__name__}: {e}"
+
+def run_shell(cmd, timeout=10):
+    try:
+        r = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=timeout)
+        return r.returncode, r.stdout.strip(), r.stderr.strip()
+    except subprocess.TimeoutExpired:
+        return 124, "", f"[E001] timeout {timeout}s"
+    except Exception as e:
+        return 1, "", f"[E002] {type(e).__name__}: {e}"
+
+def ssh_hermes(remote_cmd, timeout=8):
+    global HERMES_DOWN
+    if HERMES_DOWN:
+        return 255, "", "SKIPPED (Hermes marked down)"
+    rc, out, err = run(SSH_HERMES + [remote_cmd], timeout=timeout)
+    if rc in (255, 124) and "SKIPPED" not in err:
+        HERMES_DOWN = True
+    return rc, out, err
+
+@dataclass
+class Switch:
+    key: str
+    value_type: str
+    description: str
+    hint_query: Optional[str]
+    probe: Optional[Callable] = None
+    manual_default: Optional[str] = None
+    final_value: Optional[str] = None
+    skipped: bool = False
+    skip_reason: str = ""
+
+# ---------- Probes ----------
+
+def probe_beasty_active():
+    rc, out, err = run(["uptime"])
+    return (out, "true") if rc == 0 else (f"ERR {err}", "false")
+
+def probe_hermes_active():
+    rc, out, err = ssh_hermes("uptime")
+    return (out, "true") if rc == 0 else (f"ERR {err}", "false")
+
+def probe_swarm_mode():
+    rc, out, err = ssh_hermes("docker service ls --filter name=argos-swarm_argos --format '{{.Name}}'")
+    if rc == 0 and "argos-swarm_argos" in out:
+        return out, "true"
+    return f"rc={rc} out={out!r} err={err}", "false"
+
+def probe_swarm_leader():
+    rc, out, err = ssh_hermes("docker node ls --format '{{.Hostname}} {{.ManagerStatus}}'")
+    if rc != 0:
+        return f"ERR {err}", None
+    leader = None
+    for line in out.splitlines():
+        if "Leader" in line:
+            leader = line.split()[0].lower().split(".")[0]
+            break
+    return out, leader
+
+def probe_swarm_replicas():
+    rc, out, err = ssh_hermes(
+        "docker service inspect argos-swarm_argos --format '{{.Spec.Mode.Replicated.Replicas}}'"
+    )
+    if rc == 0 and out.isdigit():
+        return out, out
+    return f"rc={rc} out={out!r}", None
+
+def probe_bind_mount_deploy():
+    rc, out, err = ssh_hermes(
+        "docker service inspect argos-swarm_argos "
+        "--format '{{range .Spec.TaskTemplate.ContainerSpec.Mounts}}{{.Type}}:{{.Source}} {{end}}'"
+    )
+    if rc != 0:
+        return f"ERR {err}", None
+    has_bind = "bind:" in out and "argos-core" in out
+    return out, "true" if has_bind else "false"
+
+def probe_db_primary():
+    rc, out, err = run(["docker", "exec", "argos-db", "pg_isready", "-U", "claude"])
+    return (out, "beasty") if rc == 0 else (f"rc={rc} {err}", None)
+
+def probe_db_standby():
+    rc, out, err = run(DOCKER_DB + ["SELECT count(*) FROM pg_stat_replication WHERE state='streaming';"])
+    if rc != 0:
+        return f"ERR {err}", None
+    try:
+        n = int(out)
+        return f"streaming replicas: {n}", "true" if n > 0 else "false"
+    except ValueError:
+        return f"parse fail: {out!r}", None
+
+def probe_notes_handler_active():
+    if not os.path.exists(CHAT_PY):
+        return f"missing: {CHAT_PY}", "false"
+    rc, out, err = run_shell(f"grep -c 'notes-handler' {CHAT_PY}")
+    if rc == 0 and out.isdigit() and int(out) > 0:
+        return f"grep hits: {out}", "true"
+    return f"rc={rc} out={out!r}", "false"
+
+def probe_file_indexing_active():
+    if os.access(PARSER_BIN, os.X_OK):
+        return f"executable: {PARSER_BIN}", "true"
+    return f"missing or not executable: {PARSER_BIN}", "false"
+
+def _parse_heartbeat_unit(raw):
+    """Extract unit name + active state from systemctl list-units output."""
+    if not raw or "(no units" in raw:
+        return None, "false"
+    for line in raw.splitlines():
+        parts = line.split()
+        if not parts:
+            continue
+        unit = parts[0]
+        if "heart" in unit.lower():
+            active = "true" if " active " in line or " running" in line else "false"
+            return unit, active
+    return None, "false"
+
+def probe_heartbeat_beasty_active():
+    rc, out, err = run_shell("systemctl list-units --type=service --all --no-legend 2>/dev/null | grep -i heart")
+    unit, active = _parse_heartbeat_unit(out)
+    display = out if out else "(no units found)"
+    return display, active
+
+def probe_heartbeat_beasty_unit():
+    rc, out, err = run_shell("systemctl list-units --type=service --all --no-legend 2>/dev/null | grep -i heart")
+    unit, _ = _parse_heartbeat_unit(out)
+    return out if out else "(no units found)", unit
+
+def probe_heartbeat_hermes_active():
+    rc, out, err = ssh_hermes("systemctl list-units --type=service --all --no-legend | grep -i heart")
+    unit, active = _parse_heartbeat_unit(out)
+    return out if out else "(no units found)", active
+
+def probe_heartbeat_hermes_unit():
+    rc, out, err = ssh_hermes("systemctl list-units --type=service --all --no-legend | grep -i heart")
+    unit, _ = _parse_heartbeat_unit(out)
+    return out if out else "(no units found)", unit
+
+def probe_prompt_source():
+    rc, out, err = run(DOCKER_DB + ["SELECT count(*) FROM prompt_modules WHERE active=TRUE;"])
+    if rc == 0 and out.isdigit() and int(out) > 0:
+        return f"active prompt_modules: {out}", "db"
+    return f"rc={rc} err={err}", None
+
+def probe_skills_source():
+    rc, out, err = run(DOCKER_DB + ["SELECT count(*) FROM skills_tree;"])
+    if rc == 0 and out.isdigit() and int(out) > 0:
+        return f"skills_tree rows: {out}", "db"
+    return f"rc={rc} err={err}", None
+
+def probe_reasoning_source():
+    rc1, db_out, _ = run(DOCKER_DB + ["SELECT count(*) FROM reasoning_axioms WHERE active=TRUE;"])
+    rc2, fs_out, _ = run_shell(f"ls {REASONING_DIR}/*.md 2>/dev/null | wc -l")
+    db_n = db_out if rc1 == 0 else "?"
+    fs_n = fs_out if rc2 == 0 else "?"
+    display = f"DB reasoning_axioms active: {db_n} | filesystem {REASONING_DIR}/*.md: {fs_n}"
+    try:
+        db_i, fs_i = int(db_n), int(fs_n)
+        if db_i > 0 and fs_i > 0:
+            proposed = "db+files"
+        elif db_i > 0:
+            proposed = "db"
+        elif fs_i > 0:
+            proposed = "files"
+        else:
+            proposed = None
+    except ValueError:
+        proposed = None
+    return display, proposed
+
+def probe_autonomy_system():
+    rc, out, err = run(DOCKER_DB + ["SELECT count(*) FROM autonomy_rules;"])
+    if rc == 0 and out.isdigit() and int(out) > 0:
+        return f"autonomy_rules: {out}", "scout_engineer"
+    return f"rc={rc} err={err}", None
+
+# ---------- Switch registry ----------
+
+SWITCHES: list[Switch] = [
+    Switch("argos_beasty_active", "bool",
+           "Beasty (11.11.11.111) is up and responding",
+           "uptime", probe=probe_beasty_active),
+    Switch("argos_hermes_active", "bool",
+           "Hermes (11.11.11.98) is up and responding via SSH",
+           "ssh root@11.11.11.98 'uptime'", probe=probe_hermes_active),
+    Switch("argos_swarm_mode", "bool",
+           "ARGOS API runs as Docker Swarm service (not standalone)",
+           "ssh root@11.11.11.98 \"docker service ls --filter name=argos-swarm_argos\"",
+           probe=probe_swarm_mode),
+    Switch("argos_swarm_leader", "text",
+           "Hostname of permanent Swarm manager leader",
+           "ssh root@11.11.11.98 \"docker node ls --format '{{.Hostname}} {{.ManagerStatus}}'\"",
+           probe=probe_swarm_leader),
+    Switch("argos_swarm_replicas", "int",
+           "Number of replicas for argos-swarm_argos service",
+           "ssh root@11.11.11.98 \"docker service inspect argos-swarm_argos --format '{{.Spec.Mode.Replicated.Replicas}}'\"",
+           probe=probe_swarm_replicas),
+    Switch("argos_bind_mount_deploy", "bool",
+           "Code deployed via bind mount - rebuild NOT needed for .py changes",
+           "ssh root@11.11.11.98 \"docker service inspect argos-swarm_argos --format '{{range .Spec.TaskTemplate.ContainerSpec.Mounts}}{{.Type}}:{{.Source}} {{end}}'\"",
+           probe=probe_bind_mount_deploy),
+    Switch("argos_db_primary", "text",
+           "Hostname where PostgreSQL primary runs",
+           "docker exec argos-db pg_isready -U claude", probe=probe_db_primary),
+    Switch("argos_db_standby_active", "bool",
+           "Streaming replication to Hermes standby active",
+           "docker exec argos-db psql -U claude -d claudedb -c \"SELECT * FROM pg_stat_replication;\"",
+           probe=probe_db_standby),
+    Switch("argos_db_access_via", "text",
+           "How code accesses DB (haproxy:5433 routes to current primary)",
+           "psql -h 11.11.11.98 -p 5433 -U claude -d claudedb -c 'SELECT 1;'",
+           manual_default="haproxy:5433"),
+    Switch("argos_notes_handler_active", "bool",
+           "Notes handler Phase 1 live in chat.py intent-detection",
+           f"grep -c 'notes-handler' {CHAT_PY}", probe=probe_notes_handler_active),
+    Switch("argos_notes_handler_version", "text",
+           "Notes handler version (1=keyword, 2=place/target context)",
+           None, manual_default="1"),
+    Switch("argos_file_indexing_active", "bool",
+           "Meta-indexing parser (argos-file-indexer) present and executable",
+           f"test -x {PARSER_BIN}", probe=probe_file_indexing_active),
+    Switch("argos_heartbeat_daemon_beasty", "bool",
+           "Heartbeat daemon active on Beasty",
+           "systemctl list-units --type=service --all | grep -i heart",
+           probe=probe_heartbeat_beasty_active),
+    Switch("argos_heartbeat_unit_beasty", "text",
+           "Heartbeat systemd unit name on Beasty (discovered live)",
+           "systemctl list-units --type=service --all | grep -i heart",
+           probe=probe_heartbeat_beasty_unit),
+    Switch("argos_heartbeat_daemon_hermes", "bool",
+           "Heartbeat daemon active on Hermes",
+           "ssh root@11.11.11.98 'systemctl list-units --type=service --all | grep -i heart'",
+           probe=probe_heartbeat_hermes_active),
+    Switch("argos_heartbeat_unit_hermes", "text",
+           "Heartbeat systemd unit name on Hermes (discovered live)",
+           "ssh root@11.11.11.98 'systemctl list-units --type=service --all | grep -i heart'",
+           probe=probe_heartbeat_hermes_unit),
+    Switch("argos_prompt_source", "text",
+           "Where system prompt modules come from (db=prompt_modules)",
+           "SELECT count(*) FROM prompt_modules WHERE active=TRUE",
+           probe=probe_prompt_source),
+    Switch("argos_skills_source", "text",
+           "Where skills live (db=skills_tree, never filesystem)",
+           "SELECT count(*) FROM skills_tree", probe=probe_skills_source),
+    Switch("argos_reasoning_source", "text",
+           "Where reasoning rules live (db=reasoning_axioms, files=~/.argos/argos-core/reasoning/*.md)",
+           "SELECT count(*) FROM reasoning_axioms WHERE active=TRUE",
+           probe=probe_reasoning_source),
+    Switch("argos_autonomy_system", "text",
+           "Active autonomy model (scout_engineer uses autonomy_config + autonomy_rules)",
+           "SELECT count(*) FROM autonomy_rules", probe=probe_autonomy_system),
+    Switch("argos_version", "text",
+           "Current ARGOS development version", None, manual_default="v5-dev"),
+    Switch("argos_code_signing_active", "bool",
+           "Code signing (broasca-cheia) active - TRUE when implemented",
+           None, manual_default="false"),
+]
+
+# ---------- Interactive loop ----------
+
+def confirm_switch(sw, idx, total):
+    print(f"\n{BOLD}[{idx}/{total}] {sw.key}{RST}  {B}({sw.value_type}){RST}")
+    print(f"  desc: {sw.description}")
+    if sw.hint_query:
+        print(f"  hint: {Y}{sw.hint_query}{RST}")
+
+    if sw.probe:
+        if HERMES_DOWN and "hermes" in sw.key.lower() or HERMES_DOWN and "swarm" in sw.key.lower():
+            print(f"  {R}HERMES DOWN - probe skipped{RST}")
+            proposed = None
+            raw = "skipped"
+        else:
+            print(f"  {B}probing...{RST}")
+            try:
+                raw, proposed = sw.probe()
+            except Exception as e:
+                raw, proposed = f"probe exception: {e}", None
+            print(f"  raw:  {raw}")
+            if proposed is not None:
+                print(f"  {G}proposed: {proposed}{RST}")
+            else:
+                print(f"  {R}probe could not determine value{RST}")
+    else:
+        proposed = sw.manual_default
+        raw = "(manual)"
+        print(f"  {Y}manual, default: {proposed}{RST}")
+
+    while True:
+        ans = input(f"  [{G}y{RST}=accept / {R}n{RST}=skip / {Y}c{RST}=custom / q=quit]: ").strip().lower()
+        if ans in ("", "y"):
+            if proposed is None:
+                print(f"  {R}no value; use 'c' or 'n'{RST}")
+                continue
+            sw.final_value = proposed
+            return
+        if ans == "n":
+            sw.skipped = True
+            sw.skip_reason = "user skip" if not HERMES_DOWN else "hermes down"
+            return
+        if ans == "c":
+            custom = input("  value: ").strip()
+            if custom == "":
+                continue
+            sw.final_value = custom
+            return
+        if ans == "q":
+            print(f"{R}[E004] abort{RST}")
+            sys.exit(4)
+
+# ---------- SQL generation ----------
+
+def sql_escape(s):
+    return s.replace("'", "''")
+
+def generate_sql(switches):
+    lines = [
+        "-- argos-state-verify generated seed",
+        "-- apply with:",
+        "--   docker cp /tmp/argos_settings_seed.sql argos-db:/tmp/ && \\",
+        "--   docker exec argos-db psql -U claude -d claudedb -f /tmp/argos_settings_seed.sql",
+        "",
+        "BEGIN;",
+        "",
+    ]
+    for sw in switches:
+        if sw.skipped or sw.final_value is None:
+            lines.append(f"-- SKIPPED: {sw.key} ({sw.skip_reason or 'no value'})")
+            continue
+        hint = f"'{sql_escape(sw.hint_query)}'" if sw.hint_query else "NULL"
+        lines.append(
+            f"INSERT INTO settings (key, value, value_type, description, updated_by, auto_update, hint_query) "
+            f"VALUES ('{sw.key}', '{sql_escape(sw.final_value)}', '{sw.value_type}', "
+            f"'{sql_escape(sw.description)}', 'argos-state-verify', FALSE, {hint}) "
+            "ON CONFLICT (key) DO UPDATE SET "
+            "value=EXCLUDED.value, value_type=EXCLUDED.value_type, "
+            "description=EXCLUDED.description, updated_by=EXCLUDED.updated_by, "
+            "hint_query=EXCLUDED.hint_query, updated_at=now();"
+        )
+    lines += ["", "COMMIT;", ""]
+    return "\n".join(lines)
+
+# ---------- Main ----------
+
+def main():
+    print(f"{BOLD}ARGOS state verify{RST}")
+    print(f"Switches: {len(SWITCHES)}  |  Output: {OUTPUT_SQL}")
+    print(f"Assumes ALTER TABLE settings already applied. Will NOT write to DB.\n")
+    if input(f"continue? [{G}y{RST}/n]: ").strip().lower() not in ("", "y"):
+        sys.exit(4)
+
+    total = len(SWITCHES)
+    for idx, sw in enumerate(SWITCHES, start=1):
+        confirm_switch(sw, idx, total)
+
+    print(f"\n{BOLD}=== SUMMARY ==={RST}")
+    accepted = [s for s in SWITCHES if s.final_value is not None and not s.skipped]
+    skipped = [s for s in SWITCHES if s.skipped or s.final_value is None]
+    print(f"{G}accepted: {len(accepted)}{RST}  {R}skipped: {len(skipped)}{RST}")
+    if HERMES_DOWN:
+        print(f"{R}NOTE: Hermes was unreachable - related probes skipped{RST}")
+    print()
+    for s in SWITCHES:
+        if s.skipped or s.final_value is None:
+            print(f"  {R}SKIP{RST}  {s.key}  ({s.skip_reason or 'no value'})")
+        else:
+            val = s.final_value if len(s.final_value) < 50 else s.final_value[:47] + "..."
+            print(f"  {G}OK  {RST}  {s.key} = {val}")
+
+    if input(f"\nwrite {OUTPUT_SQL}? [{G}y{RST}/n]: ").strip().lower() not in ("", "y"):
+        sys.exit(0)
+
+    try:
+        with open(OUTPUT_SQL, "w") as f:
+            f.write(generate_sql(SWITCHES))
+    except Exception as e:
+        print(f"{R}[E002] write failed: {e}{RST}")
+        sys.exit(2)
+
+    print(f"\n{G}written: {OUTPUT_SQL}{RST}")
+    print(f"review: less {OUTPUT_SQL}")
+    print(f"apply:  docker cp {OUTPUT_SQL} argos-db:/tmp/ && \\")
+    print(f"        docker exec argos-db psql -U claude -d claudedb -f /tmp/argos_settings_seed.sql")
+
+if __name__ == "__main__":
+    main()

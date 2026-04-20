@@ -1,0 +1,299 @@
+<div class="module module-jobs"
+     x-data="jobsModule()"
+     x-init="loadAll()">
+
+  <div class="mod-header">
+    <h2 class="mod-title">JOBS</h2>
+    <button type="button" class="mod-refresh" @click="loadAll()" :disabled="loading">
+      <span x-show="!loading">↻ refresh</span>
+      <span x-show="loading">incarc...</span>
+    </button>
+  </div>
+
+  <div x-show="error" class="mod-error" x-text="error"></div>
+
+  <div class="jobs-summary" x-show="data">
+    <span><b x-text="counts.total"></b> total</span>
+    <span class="dot waiting"></span><b x-text="counts.waiting"></b> waiting
+    <span class="dot running"></span><b x-text="counts.running"></b> running
+    <span class="dot ok"></span><b x-text="counts.ok"></b> ok
+    <span class="dot failed"></span><b x-text="counts.failed"></b> failed
+    <span class="jobs-pending-auth" x-show="pending.length > 0">
+      ⚠ <b x-text="pending.length"></b> pending auth
+    </span>
+  </div>
+
+  <div class="jobs-controls">
+    <div class="filter-chips">
+      <button type="button" class="chip" :class="filter === 'all' && 'active'" @click="filter = 'all'">all</button>
+      <button type="button" class="chip" :class="filter === 'active' && 'active'" @click="filter = 'active'">active</button>
+      <button type="button" class="chip" :class="filter === 'waiting' && 'active'" @click="filter = 'waiting'">waiting auth</button>
+      <button type="button" class="chip" :class="filter === 'failed' && 'active'" @click="filter = 'failed'">failed</button>
+    </div>
+  </div>
+
+  <div class="jobs-list" x-show="data">
+    <template x-for="j in filteredJobs" :key="j.id">
+      <div class="job-row-wrap">
+        <div class="job-row" :class="['status-' + (j.status || 'unknown'), expandedId === j.id && 'expanded']"
+             @click="toggleExpand(j.id)" style="cursor:pointer;">
+          <div class="job-icon">
+            <span class="dot" :class="j.status || 'unknown'"></span>
+          </div>
+          <div class="job-main">
+            <div class="job-title">
+              <span class="job-id">#<span x-text="j.id"></span></span>
+              <span x-text="j.title"></span>
+              <span style="float:right;opacity:0.4;font-size:11px;" x-text="expandedId === j.id ? '▼' : '▶'"></span>
+            </div>
+            <div class="job-meta">
+              <span class="job-status" x-text="j.status"></span>
+              · <span x-text="formatTime(j.created_at)"></span>
+              <span x-show="j.error" class="job-error" x-text="'· ' + j.error"></span>
+            </div>
+          </div>
+        </div>
+
+        <div x-show="expandedId === j.id" class="job-detail" style="padding:12px 16px;border-top:1px solid var(--border, #2a2a2a);">
+          <div x-show="detailLoading" style="color:var(--text3,#666);font-size:12px;">loading details...</div>
+          <div x-show="!detailLoading && detail">
+            <div style="display:flex;gap:16px;margin-bottom:10px;font-size:12px;color:var(--text3,#888);">
+              <span>conversation: #<span x-text="detail?.job?.conversation_id"></span></span>
+              <span>created: <span x-text="formatTimeFull(detail?.job?.created_at)"></span></span>
+              <span>updated: <span x-text="formatTimeFull(detail?.job?.updated_at)"></span></span>
+              <span>segment: <span x-text="(detail?.job?.current_segment ?? 0) + '/' + (detailSteps.length)"></span></span>
+            </div>
+
+            <div style="margin-bottom:10px;">
+              <div style="font-size:11px;text-transform:uppercase;color:var(--accent,#c49a6c);margin-bottom:6px;">Steps</div>
+              <template x-for="(step, idx) in detailSteps" :key="idx">
+                <div style="display:flex;gap:8px;padding:4px 0;font-family:monospace;font-size:12px;border-bottom:1px solid rgba(255,255,255,0.05);">
+                  <span style="min-width:24px;color:var(--text3,#666);" x-text="idx"></span>
+                  <span style="min-width:60px;" x-text="step.target || '-'"></span>
+                  <span style="flex:1;color:var(--text1,#ddd);" x-text="step.command"></span>
+                  <span x-show="getStepResult(idx)" style="min-width:30px;"
+                        :style="getStepResult(idx)?.returncode === 0 ? 'color:#4a4' : 'color:#a44'"
+                        x-text="getStepResult(idx)?.returncode === 0 ? '✓' : '✗ rc=' + getStepResult(idx)?.returncode"></span>
+                </div>
+              </template>
+              <div x-show="detailSteps.length === 0" style="color:var(--text3,#666);font-size:12px;">no steps data</div>
+            </div>
+
+            <template x-if="detailResults.length > 0">
+              <div style="margin-bottom:10px;">
+                <div style="font-size:11px;text-transform:uppercase;color:var(--accent,#c49a6c);margin-bottom:6px;">Results</div>
+                <template x-for="(r, idx) in detailResults" :key="idx">
+                  <div style="margin-bottom:6px;padding:6px 8px;background:rgba(0,0,0,0.3);border-radius:4px;font-size:11px;">
+                    <div style="display:flex;gap:8px;margin-bottom:2px;">
+                      <span style="color:var(--text3,#666);">step <span x-text="r.step"></span></span>
+                      <span style="font-family:monospace;" x-text="r.command"></span>
+                      <span :style="r.returncode === 0 ? 'color:#4a4' : 'color:#a44'"
+                            x-text="'rc=' + r.returncode"></span>
+                    </div>
+                    <pre x-show="r.stdout" style="margin:2px 0;white-space:pre-wrap;color:var(--text2,#aaa);font-size:11px;max-height:120px;overflow-y:auto;" x-text="r.stdout"></pre>
+                    <pre x-show="r.stderr" style="margin:2px 0;white-space:pre-wrap;color:#a44;font-size:11px;max-height:80px;overflow-y:auto;" x-text="r.stderr"></pre>
+                  </div>
+                </template>
+              </div>
+            </template>
+
+            <template x-if="(detail?.authorizations || []).length > 0">
+              <div style="margin-bottom:10px;">
+                <div style="font-size:11px;text-transform:uppercase;color:var(--accent,#c49a6c);margin-bottom:6px;">Authorizations</div>
+                <template x-for="a in detail.authorizations" :key="a.id">
+                  <div class="job-auth-block" style="margin-bottom:6px;padding:8px;background:rgba(0,0,0,0.2);border-radius:4px;">
+                    <div style="font-size:12px;" x-text="a.operation"></div>
+                    <pre style="font-size:11px;white-space:pre-wrap;color:var(--text3,#888);margin:4px 0;" x-text="a.details"></pre>
+                    <div style="display:flex;gap:8px;align-items:center;">
+                      <span class="job-auth-risk" :class="'risk-' + a.risk_level"
+                            x-text="'risk: ' + a.risk_level" style="font-size:11px;"></span>
+                      <span style="font-size:11px;color:var(--text3,#888);" x-text="'status: ' + a.status"></span>
+                      <template x-if="a.status === 'pending'">
+                        <span style="display:flex;gap:4px;">
+                          <button type="button" class="auth-approve" @click.stop="decide(a.id, 'approved')">✓ aproba</button>
+                          <button type="button" class="auth-deny" @click.stop="decide(a.id, 'denied')">✕ refuza</button>
+                        </span>
+                      </template>
+                    </div>
+                  </div>
+                </template>
+              </div>
+            </template>
+
+            <div style="display:flex;gap:8px;">
+              <button type="button" x-show="detail?.job?.status === 'pending'"
+                      style="padding:6px 14px;background:var(--accent,#c49a6c);color:#000;border:none;border-radius:4px;cursor:pointer;font-size:12px;"
+                      @click.stop="executeJob(j.id)">▶ Execute</button>
+              <button type="button" x-show="detail?.job?.status === 'failed'"
+                      style="padding:6px 14px;background:#a44;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;"
+                      @click.stop="deleteJob(j.id)">✕ Delete</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </template>
+    <div x-show="filteredJobs.length === 0" class="nodata">
+      nimic in jobs care sa corespunda filtrului
+    </div>
+  </div>
+</div>
+
+<script>
+function jobsModule() {
+  return {
+    data: null,
+    pending: [],
+    filter: 'all',
+    loading: false,
+    error: null,
+    expandedId: null,
+    detail: null,
+    detailLoading: false,
+
+    async loadAll() {
+      this.loading = true;
+      this.error = null;
+      try {
+        const [jr, ar] = await Promise.all([
+          fetch('/api/jobs').then(r => r.ok ? r.json() : Promise.reject('jobs HTTP ' + r.status)),
+          fetch('/api/authorizations/pending').then(r => r.ok ? r.json() : Promise.reject('auth HTTP ' + r.status)),
+        ]);
+        this.data = jr.jobs || jr || [];
+        this.pending = ar.authorizations || ar || [];
+      } catch (e) {
+        this.error = 'eroare incarcare: ' + e;
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    get counts() {
+      const list = this.data || [];
+      return {
+        total: list.length,
+        waiting: list.filter(j => j.status === 'waiting_auth' || j.status === 'pending').length,
+        running: list.filter(j => j.status === 'running').length,
+        ok: list.filter(j => j.status === 'ok').length,
+        failed: list.filter(j => j.status === 'failed').length,
+      };
+    },
+
+    get filteredJobs() {
+      let list = this.data || [];
+      if (this.filter === 'active')  list = list.filter(j => ['pending','running','waiting_auth'].includes(j.status));
+      if (this.filter === 'waiting') list = list.filter(j => j.status === 'waiting_auth' || this.getAuth(j.id));
+      if (this.filter === 'failed')  list = list.filter(j => j.status === 'failed');
+      return list.slice().sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+    },
+
+    get detailSteps() {
+      if (!this.detail || !this.detail.job) return [];
+      try {
+        const seg = this.detail.job.segments;
+        if (typeof seg === 'string') return JSON.parse(seg);
+        if (Array.isArray(seg)) return seg;
+        return [];
+      } catch (e) { return []; }
+    },
+
+    get detailResults() {
+      if (!this.detail || !this.detail.job) return [];
+      try {
+        const res = this.detail.job.results;
+        if (typeof res === 'string') return JSON.parse(res);
+        if (Array.isArray(res)) return res;
+        return [];
+      } catch (e) { return []; }
+    },
+
+    getStepResult(idx) {
+      return this.detailResults.find(r => r.step === idx) || null;
+    },
+
+    async toggleExpand(id) {
+      if (this.expandedId === id) {
+        this.expandedId = null;
+        this.detail = null;
+        return;
+      }
+      this.expandedId = id;
+      this.detail = null;
+      this.detailLoading = true;
+      try {
+        const r = await fetch('/api/jobs/' + id);
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        this.detail = await r.json();
+      } catch (e) {
+        this.error = 'eroare detalii job: ' + e.message;
+      } finally {
+        this.detailLoading = false;
+      }
+    },
+
+    async executeJob(id) {
+      if (!confirm('Executa job #' + id + '?')) return;
+      try {
+        const r = await fetch('/api/jobs/' + id + '/execute', {method: 'POST'});
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        await this.loadAll();
+        await this.toggleExpand(id);
+        this.expandedId = id;
+      } catch (e) {
+        alert('Eroare executie: ' + e.message);
+      }
+    },
+
+    async deleteJob(id) {
+      if (!confirm('Stergi job #' + id + '?')) return;
+      try {
+        const r = await fetch('/api/jobs/' + id, {method: 'DELETE'});
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        this.expandedId = null;
+        this.detail = null;
+        await this.loadAll();
+      } catch (e) {
+        alert('Eroare stergere: ' + e.message);
+      }
+    },
+
+    getAuth(jobId) {
+      return this.pending.find(a => a.job_id === jobId) || null;
+    },
+
+    async decide(authId, decision) {
+      try {
+        const r = await fetch('/api/authorizations/' + authId + '/decide', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({decision: decision})
+        });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        await this.loadAll();
+        if (this.expandedId) {
+          const id = this.expandedId;
+          this.expandedId = null;
+          await this.toggleExpand(id);
+        }
+      } catch (e) {
+        alert('Eroare decizie: ' + e.message);
+      }
+    },
+
+    formatTime(iso) {
+      if (!iso) return '-';
+      try {
+        const d = new Date(iso);
+        return d.toLocaleString('ro-RO', {month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});
+      } catch (e) { return iso; }
+    },
+
+    formatTimeFull(iso) {
+      if (!iso) return '-';
+      try {
+        const d = new Date(iso);
+        return d.toLocaleString('ro-RO');
+      } catch (e) { return iso; }
+    }
+  };
+}
+</script>

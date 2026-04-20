@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ARGOS</title>
+<link rel="stylesheet" href="/ui/static/argos.css">
+<script>
+function liveActivity() {
+  return {
+    events: [],
+    connected: false,
+    paused: false,
+    es: null,
+    seqCounter: 0,
+    MAX_EVENTS: 200,
+
+    connect() {
+      try {
+        this.es = new EventSource('/api/stream/activity');
+      } catch (e) {
+        console.error('SSE init failed:', e);
+        return;
+      }
+
+      this.es.addEventListener('hello', (e) => {
+        this.connected = true;
+        this.push('hello', '⬡', 'stream connected');
+      });
+
+      this.es.addEventListener('tick', (e) => {
+        // tick e doar keep-alive, nu il afisam ca eveniment, doar marcheaza connected
+        this.connected = true;
+      });
+
+      this.es.addEventListener('heartbeat', (e) => {
+        try {
+          const d = JSON.parse(e.data);
+          const icon = d.status === 'ok' ? '✓' : (d.status === 'warn' ? '⚠' : '✗');
+          const cpu = d.cpu_pct >= 0 ? `${d.cpu_pct.toFixed(1)}%` : '?';
+          const msg = `${d.node}/${d.service} cpu ${cpu} mem ${d.mem_pct?.toFixed(1)}% db ${d.db_latency_ms}ms`;
+          this.push('heartbeat', icon, msg, d.ts);
+        } catch (err) { console.error('hb parse:', err); }
+      });
+
+      this.es.addEventListener('heartbeat_summary', (e) => {
+        try {
+          const d = JSON.parse(e.data);
+          const n = (d.checks || []).length;
+          this.push('summary', '◈', `summary ${n} checks`, d.ts);
+        } catch (err) {}
+      });
+
+      this.es.addEventListener('error', (e) => {
+        // EventSource error event (not server-sent 'error' event)
+        if (this.es.readyState === EventSource.CLOSED) {
+          this.connected = false;
+          this.push('disc', '○', 'stream disconnected');
+          // Auto-reconnect dupa 3s
+          setTimeout(() => this.connect(), 3000);
+        } else if (this.es.readyState === EventSource.CONNECTING) {
+          this.connected = false;
+        }
+      });
+    },
+
+    push(kind, icon, msg, ts) {
+      if (this.paused) return;
+      const now = ts ? new Date(ts) : new Date();
+      const tsShort = now.toTimeString().slice(0, 8);
+      this.seqCounter++;
+      this.events.push({
+        uid: this.seqCounter,
+        kind: kind,
+        icon: icon,
+        msg: msg,
+        tsShort: tsShort,
+      });
+      // Trim to MAX_EVENTS
+      if (this.events.length > this.MAX_EVENTS) {
+        this.events.splice(0, this.events.length - this.MAX_EVENTS);
+      }
+      // Auto-scroll to bottom
+      this.$nextTick(() => {
+        const feed = this.$refs.feed;
+        if (feed) feed.scrollTop = feed.scrollHeight;
+      });
+    }
+  };
+}
+
+function rightHealth() {
+  return {
+    data: null,
+    counts: {ok: 0, total: 0},
+    timer: null,
+    async poll() {
+      try {
+        const r = await fetch('/api/health/snapshot');
+        if (r.ok) {
+          this.data = await r.json();
+          this.counts.total = (this.data.items || []).length;
+          this.counts.ok = (this.data.items || []).filter(x => x.status === 'ok').length;
+        }
+      } catch (e) {}
+      this.timer = setTimeout(() => this.poll(), 10000);
+    }
+  };
+}
+
+function rightAuth() {
+  return {
+    items: [],
+    timer: null,
+    async poll() {
+      try {
+        const r = await fetch('/api/authorizations/pending');
+        if (r.ok) {
+          const data = await r.json();
+          this.items = data.authorizations || data || [];
+          // Notify top bar badge
+          window.dispatchEvent(new CustomEvent('argos-auth-count', {detail: this.items.length}));
+        }
+      } catch (e) {}
+      this.timer = setTimeout(() => this.poll(), 5000);
+    },
+    async decide(authId, decision) {
+      try {
+        const r = await fetch('/api/authorizations/' + authId + '/decide', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({decision: decision})
+        });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        this.poll();
+      } catch (e) {
+        alert('Eroare decizie: ' + e.message);
+      }
+    }
+  };
+}
+
+function settingsDrawer() {
+  return {
+    providers: [
+      {key: 'claude_enabled', label: 'Claude (Anthropic)', value: '?', disabled: false},
+      {key: 'local_enabled',  label: 'Local (Ollama)',     value: '?', disabled: false},
+    ],
+    reasoningMode: '?',
+    reasoningDisabled: false,
+    modules: [],
+    error: null,
+    loaded: false,
+
+    async load() {
+      if (this.loaded) return;
+      this.error = null;
+      await Promise.all(this.providers.map(p => this.loadProvider(p)));
+      try {
+        const r = await fetch('/api/reasoning-mode');
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const d = await r.json();
+        this.reasoningMode = d.mode || 'unknown';
+      } catch (e) {
+        this.reasoningDisabled = true;
+        this.reasoningMode = 'n/a';
+      }
+      try {
+        const r = await fetch('/api/prompt-modules');
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const d = await r.json();
+        this.modules = (d.modules || []).sort((a, b) => (a.priority || 0) - (b.priority || 0));
+      } catch (e) {
+        this.modules = [];
+      }
+      this.loaded = true;
+    },
+
+    async loadProvider(p) {
+      try {
+        const r = await fetch('/api/settings/' + p.key);
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const d = await r.json();
+        p.value = d.value || 'false';
+      } catch (e) {
+        p.value = '?';
+        p.disabled = true;
+      }
+    },
+
+    async toggleProvider(p) {
+      if (p.disabled) return;
+      const newVal = p.value === 'true' ? 'false' : 'true';
+      try {
+        const r = await fetch('/api/settings/' + p.key + '?value=' + newVal, {method: 'POST'});
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const d = await r.json();
+        p.value = d.value;
+      } catch (e) {
+        this.error = 'eroare toggle: ' + e.message;
+      }
+    },
+
+    async toggleReasoning() {
+      if (this.reasoningDisabled) return;
+      const newMode = this.reasoningMode === 'full' ? 'local' : 'full';
+      try {
+        const r = await fetch('/api/reasoning-mode', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({mode: newMode})
+        });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const d = await r.json();
+        this.reasoningMode = d.mode || newMode;
+      } catch (e) {
+        this.error = 'eroare reasoning toggle: ' + e.message;
+      }
+    }
+  };
+}
+
+function shellState() {
+  return {
+    activeModule: 'dashboard',
+    drawerOpen: false,
+    settingsOpen: false,
+    authCount: 0,
+    async promoteInstant() {
+      const title = prompt('Titlu pentru noua conversatie (din Instant):');
+      if (!title || !title.trim()) return;
+      try {
+        const r = await fetch('/api/conversations/1/promote', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({title: title.trim()})
+        });
+        const data = await r.json();
+        if (!r.ok) {
+          alert('Eroare promote: ' + (data.detail || r.status));
+          return;
+        }
+        // Refresh chats module daca e activ
+        if (this.activeModule === 'chats') {
+          htmx.ajax('GET', '/ui/modules/chats.html',
+                    {target: '#central-slot', swap: 'innerHTML'});
+        }
+        // Notificare discreta in console pentru debug Pas 2
+        console.log('Promote OK:', data);
+      } catch (e) {
+        alert('Eroare retea: ' + e.message);
+      }
+    }
+  };
+}
+</script>
+<script defer src="/ui/static/alpine.min.js"></script>
+<script src="/ui/static/htmx.min.js"></script>
+<script src="/ui/static/htmx-sse.min.js"></script>
+<script src="/ui/static/argos.js"></script>
+</head>
+<body hx-ext="sse">
+
+<div class="shell"
+     x-data="shellState()">
+
+  <!-- ============ TOP BAR ============ -->
+  <header class="topbar">
+    <span class="brand">⬡ ARGOS<span class="version">// v5-dev</span></span>
+    <button type="button" @click="promoteInstant()">+ conv</button>
+    <button type="button">⛔ stop all</button>
+    <span class="spacer"></span>
+    <span class="badge" :class="authCount === 0 && 'zero'"
+          x-text="authCount === 0 ? 'auth ok' : ('⚠ ' + authCount + ' auth')"
+          @argos-auth-count.window="authCount = $event.detail"></span>
+    <button type="button" class="icon-btn" title="settings" @click="settingsOpen = true">⚙</button>
+    <button type="button" class="icon-btn drawer-toggle"
+            @click="drawerOpen = !drawerOpen" title="panou lateral">☰</button>
+    <span class="user">◉ darkangel</span>
+  </header>
+
+  <!-- ============ SIDEBAR ============ -->
+  <nav class="sidebar">
+    <div class="sb-brand">ARGOS</div>
+    <template x-for="m in [
+      {id:'dashboard', ico:'▦', label:'dashboard'},
+      {id:'chats',     ico:'💬', label:'chats'},
+      {id:'fleet',     ico:'⬢', label:'fleet'},
+      {id:'reasoning', ico:'🧠', label:'reasoning'},
+      {id:'health',    ico:'❤', label:'health'},
+      {id:'jobs',      ico:'⚡', label:'jobs'}
+    ]" :key="m.id">
+      <button type="button" class="mod-btn"
+              :class="activeModule === m.id && 'active'"
+              @click="activeModule = m.id"
+              :hx-get="'/ui/modules/' + m.id + '.html'"
+              hx-target="#central-slot"
+              hx-swap="innerHTML">
+        <span class="ico" x-text="m.ico"></span>
+        <span x-text="m.label"></span>
+      </button>
+    </template>
+    <div class="more">
+      <button type="button" class="mod-btn">
+        <span class="ico">·</span><span>more</span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- ============ CENTRAL SLOT ============ -->
+  <main class="central"
+        id="central-slot"
+        hx-get="/ui/modules/dashboard.html"
+        hx-trigger="load"
+        hx-swap="innerHTML">
+    <div class="empty-state">
+      <div class="glyph">⬡</div>
+      <div>incarc dashboard...</div>
+    </div>
+  </main>
+
+  <!-- ============ RIGHT COLUMN ============ -->
+  <aside class="right" :class="drawerOpen && 'open'">
+    <div class="zone live"
+         x-data="liveActivity()"
+         x-init="connect()"
+         @mouseenter="paused = true"
+         @mouseleave="paused = false">
+      <h3>
+        LIVE ACTIVITY
+        <span class="sse-status" :class="connected ? 'on' : 'off'"
+              x-text="connected ? '● live' : '○ offline'"></span>
+      </h3>
+      <div class="live-feed" x-ref="feed">
+        <template x-for="ev in events" :key="ev.uid">
+          <div class="live-row" :class="'evt-' + ev.kind">
+            <span class="live-ts" x-text="ev.tsShort"></span>
+            <span class="live-ico" x-text="ev.icon"></span>
+            <span class="live-msg" x-text="ev.msg"></span>
+          </div>
+        </template>
+        <div x-show="events.length === 0" class="nodata">
+          asteptam evenimente...
+        </div>
+      </div>
+    </div>
+    <div class="zone health"
+         x-data="rightHealth()"
+         x-init="poll()">
+      <h3>
+        HEALTH
+        <span class="zone-meta" x-text="data ? (counts.ok + '/' + counts.total + ' ok') : '...'"></span>
+      </h3>
+      <div class="health-mini">
+        <template x-for="svc in (data?.items || [])" :key="svc.id">
+          <div class="health-mini-row" :class="'status-' + svc.status">
+            <span class="dot" :class="svc.status"></span>
+            <span class="hm-name" x-text="svc.node"></span>
+            <span class="hm-cpu" x-text="(svc.cpu_pct >= 0 ? svc.cpu_pct.toFixed(0) : '?') + '%'"></span>
+          </div>
+        </template>
+        <div x-show="(data?.items || []).length === 0" class="nodata">no data</div>
+      </div>
+    </div>
+    <div class="zone auth"
+         x-data="rightAuth()"
+         x-init="poll()">
+      <h3>
+        AUTH PENDING
+        <span class="zone-meta" x-text="items.length + ' waiting'"></span>
+      </h3>
+      <div class="auth-mini">
+        <template x-for="a in items" :key="a.id">
+          <div class="auth-mini-row">
+            <div class="am-op" x-text="a.operation"></div>
+            <div class="am-meta">
+              <span class="am-risk" :class="'risk-' + a.risk_level" x-text="a.risk_level"></span>
+              <span class="am-job" x-text="'job #' + a.job_id"></span>
+            </div>
+            <div class="am-actions">
+              <button type="button" class="am-approve" @click="decide(a.id, 'approved')">✓</button>
+              <button type="button" class="am-deny" @click="decide(a.id, 'denied')">✕</button>
+            </div>
+          </div>
+        </template>
+        <div x-show="items.length === 0" class="nodata">0 waiting</div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ============ SETTINGS DRAWER ============ -->
+  <aside class="settings-drawer"
+         :class="settingsOpen && 'open'"
+         x-data="settingsDrawer()"
+         x-init="$watch('$root.settingsOpen', v => v && load())">
+    <div class="sd-header">
+      <h2 class="sd-title">SETTINGS</h2>
+      <button type="button" class="sd-close" @click="settingsOpen = false">✕</button>
+    </div>
+
+    <div x-show="error" class="mod-error" x-text="error"></div>
+
+    <div class="sd-section">
+      <h3 class="sd-section-title">LLM PROVIDERS</h3>
+      <template x-for="p in providers" :key="p.key">
+        <div class="sd-toggle-row" :class="p.disabled && 'disabled'">
+          <div class="sd-toggle-label">
+            <span class="sd-toggle-name" x-text="p.label"></span>
+            <span x-show="p.disabled" class="sd-toggle-note">(endpoint indisponibil)</span>
+          </div>
+          <button type="button" class="sd-toggle"
+                  :class="p.value === 'true' ? 'on' : 'off'"
+                  :disabled="p.disabled"
+                  @click="toggleProvider(p)">
+            <span x-text="p.value === 'true' ? 'ON' : 'OFF'"></span>
+          </button>
+        </div>
+      </template>
+    </div>
+
+    <div class="sd-section">
+      <h3 class="sd-section-title">REASONING MODE</h3>
+      <div class="sd-toggle-row" :class="reasoningDisabled && 'disabled'">
+        <div class="sd-toggle-label">
+          <span class="sd-toggle-name" x-text="'mod: ' + (reasoningMode || '?')"></span>
+          <span class="sd-toggle-note">axioms = doar reguli statice · full = +DB reasoning_log</span>
+        </div>
+        <button type="button" class="sd-toggle"
+                :class="reasoningMode === 'full' ? 'on' : 'off'"
+                :disabled="reasoningDisabled"
+                @click="toggleReasoning()">
+          <span x-text="reasoningMode === 'full' ? 'FULL' : 'AXIOMS'"></span>
+        </button>
+      </div>
+    </div>
+
+    <div class="sd-section">
+      <h3 class="sd-section-title">LANGUAGE</h3>
+      <div class="sd-toggle-row">
+        <div class="sd-toggle-label">
+          <span class="sd-toggle-name">interface language</span>
+          <span class="sd-toggle-note">RO activ · EN/DE traduceri vin in iter2</span>
+        </div>
+        <div class="sd-lang-group">
+          <button type="button" class="sd-lang active">RO</button>
+          <button type="button" class="sd-lang disabled" disabled>EN</button>
+          <button type="button" class="sd-lang disabled" disabled>DE</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="sd-section">
+      <h3 class="sd-section-title">PROMPT MODULES</h3>
+      <div class="sd-note">read-only la Pas 5 · editor content vine in iter2</div>
+      <div class="sd-modules-list">
+        <template x-for="m in modules" :key="m.name">
+          <div class="sd-module-row">
+            <div class="sd-module-info">
+              <span class="sd-module-name" x-text="m.display_name || m.name"></span>
+              <span class="sd-module-cat" x-text="m.category"></span>
+              <span class="sd-module-prio">p<span x-text="m.priority"></span></span>
+            </div>
+            <span class="sd-module-status" :class="m.active ? 'on' : 'off'"
+                  x-text="m.active ? '● activ' : '○ inactiv'"></span>
+          </div>
+        </template>
+        <div x-show="modules.length === 0" class="nodata">no modules</div>
+      </div>
+    </div>
+
+    <div class="sd-section">
+      <h3 class="sd-section-title">AUTH</h3>
+      <div class="sd-note">wireframe placeholder · backend auth vine in iter2 (Q12=C)</div>
+      <div class="sd-auth-stub">
+        <div class="sd-auth-row">user: <b>darkangel</b> (single user mode)</div>
+        <div class="sd-auth-row">session: local</div>
+        <div class="sd-auth-row">2FA: nu</div>
+      </div>
+    </div>
+
+    <div class="sd-section">
+      <h3 class="sd-section-title">KEYBOARD</h3>
+      <div class="sd-kbd-list">
+        <div class="sd-kbd-row"><kbd>Esc</kbd> inchide drawer/modal</div>
+        <div class="sd-kbd-row"><kbd>F</kbd> fullscreen modul (TODO iter2)</div>
+        <div class="sd-kbd-row"><kbd>Ctrl+K</kbd> command palette (TODO iter2)</div>
+      </div>
+    </div>
+
+    <div class="sd-footer">
+      ARGOS UI v1 · build dev · iteration 1
+    </div>
+  </aside>
+
+  <div class="settings-backdrop"
+       x-show="settingsOpen"
+       @click="settingsOpen = false"
+       @keydown.escape.window="settingsOpen = false"
+       x-transition.opacity></div>
+
+</div>
+
+</body>
+</html>

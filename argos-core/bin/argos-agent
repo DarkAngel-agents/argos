@@ -1,0 +1,536 @@
+#!/usr/bin/env python3.13
+"""
+argos-agent - CLI for ARGOS-Commander agent loop sessions.
+
+Session 2 MVP scope: start, status, resume, logs, stop.
+No spawner daemon yet - all sessions run foreground.
+
+Usage:
+    argos-agent start "goal text" [--autonomy N] [--max-iter N] [--title T] [--detached]
+    argos-agent status [session_id]
+    argos-agent resume <session_id> [--answer "..."]
+    argos-agent logs <session_id> [--tail N] [--what commands|errors|decisions|llm_calls|verifications|all]
+    argos-agent stop <session_id>
+
+Exit codes:
+    0 - success
+    1 - user error (invalid args, session not found, etc)
+    2 - internal error (DB down, loop crash, etc)
+"""
+import argparse
+import asyncio
+import json
+import os
+import sys
+import traceback
+from typing import Optional
+
+# Ensure argos-core is on sys.path before importing agent.* / llm.*
+_ARGOS_CORE = os.path.expanduser("~/.argos/argos-core")
+if _ARGOS_CORE not in sys.path:
+    sys.path.insert(0, _ARGOS_CORE)
+
+import asyncpg
+from dotenv import load_dotenv
+
+load_dotenv(os.path.expanduser("~/.argos/argos-core/config/.env"))
+
+from agent import loop as agent_loop  # noqa: E402
+from agent import evidence  # noqa: E402
+
+
+# ============================================================================
+# DB helpers
+# ============================================================================
+
+
+async def _get_pool() -> asyncpg.Pool:
+    """Build asyncpg pool from env."""
+    return await asyncpg.create_pool(
+        host=os.getenv("DB_HOST", "11.11.11.111"),
+        port=int(os.getenv("DB_PORT", "5432")),
+        user=os.getenv("DB_USER", "claude"),
+        password=os.getenv("DB_PASSWORD"),
+        database=os.getenv("DB_NAME", "claudedb"),
+        min_size=1,
+        max_size=2,
+    )
+
+
+def _parse_evidence(ev) -> dict:
+    """Normalize evidence JSONB into a dict (handles string or dict input)."""
+    if ev is None:
+        return {"commands": [], "verifications": [], "errors": [], "decisions": [], "llm_calls": []}
+    if isinstance(ev, str):
+        try:
+            return json.loads(ev)
+        except Exception:
+            return {}
+    return dict(ev)
+
+
+# ============================================================================
+# Formatting helpers
+# ============================================================================
+
+
+def _truncate(text: str, limit: int) -> str:
+    if text is None:
+        return ""
+    text = str(text)
+    if len(text) <= limit:
+        return text
+    return text[: limit - 3] + "..."
+
+
+def _format_session_short(row: dict) -> str:
+    """One-liner for list view."""
+    sid = row.get("id")
+    title = _truncate(row.get("title") or "(no title)", 40)
+    phase = row.get("phase", "?")
+    iteration = row.get("iteration", 0)
+    max_iter = row.get("max_iterations", 0)
+    active = "active" if row.get("active") else "inactive"
+    goal = _truncate(row.get("goal") or "", 60)
+    return (
+        f"  #{sid:<5} [{phase:<10}] iter={iteration}/{max_iter:<3} "
+        f"{active:<8} {title}\n"
+        f"         goal: {goal}"
+    )
+
+
+def _format_session_detail(row: dict, ev: dict) -> str:
+    """Multi-line detail view for a single session."""
+    lines = []
+    sep = "=" * 70
+    lines.append(sep)
+    lines.append(f"Session #{row.get('id')}: {row.get('title') or '(no title)'}")
+    lines.append(sep)
+    lines.append(f"  Phase:           {row.get('phase')}")
+    lines.append(f"  Active:          {row.get('active')}")
+    lines.append(f"  Iteration:       {row.get('iteration')}/{row.get('max_iterations')}")
+    lines.append(f"  Autonomy level:  {row.get('autonomy_level')}")
+    lines.append(f"  LLM provider:    {row.get('llm_provider') or '(default)'}")
+    lines.append(f"  Total tokens:    {row.get('total_tokens')}")
+    lines.append(f"  Total cost EUR:  {row.get('total_cost_eur')}")
+    lines.append(f"  Created by:      {row.get('created_by') or '(unknown)'}")
+    lines.append(f"  Started:         {row.get('started_at')}")
+    lines.append(f"  Last active:     {row.get('last_active_at')}")
+    if row.get("completed_at"):
+        lines.append(f"  Completed:       {row.get('completed_at')}")
+    lines.append("")
+    lines.append(f"  Goal:")
+    lines.append(f"    {row.get('goal') or '(empty)'}")
+    if row.get("current_task"):
+        lines.append(f"  Current task:")
+        lines.append(f"    {row.get('current_task')}")
+    lines.append("")
+    lines.append("-" * 70)
+    lines.append("Evidence summary:")
+    lines.append(f"  commands:      {len(ev.get('commands', []))}")
+    lines.append(f"  verifications: {len(ev.get('verifications', []))}")
+    lines.append(f"  errors:        {len(ev.get('errors', []))}")
+    lines.append(f"  decisions:     {len(ev.get('decisions', []))}")
+    lines.append(f"  llm_calls:     {len(ev.get('llm_calls', []))}")
+    lines.append("")
+
+    # Last command preview.
+    commands = ev.get("commands", [])
+    if commands:
+        last = commands[-1]
+        lines.append("Last command:")
+        lines.append(f"  cmd:       {_truncate(last.get('cmd', ''), 100)}")
+        lines.append(f"  machine:   {last.get('machine', '?')}")
+        lines.append(f"  exit_code: {last.get('exit_code')}")
+        lines.append(f"  duration:  {last.get('duration_ms')}ms")
+        lines.append(f"  ts:        {last.get('ts', '?')}")
+        stdout = _truncate((last.get("stdout") or "").strip(), 200)
+        if stdout:
+            lines.append(f"  stdout:    {stdout}")
+        stderr = _truncate((last.get("stderr") or "").strip(), 200)
+        if stderr:
+            lines.append(f"  stderr:    {stderr}")
+        lines.append("")
+
+    # Pending clarification detection.
+    decisions = ev.get("decisions", [])
+    pending_q = None
+    for d in reversed(decisions):
+        reason = str(d.get("reason") or "")
+        action = str(d.get("action") or "")
+        if action == "resume_clarification":
+            break
+        if reason.startswith(agent_loop.PAUSE_CLARIFICATION_PREFIX):
+            pending_q = reason[len(agent_loop.PAUSE_CLARIFICATION_PREFIX):].strip()
+            break
+    if pending_q:
+        lines.append("*** PENDING CLARIFICATION ***")
+        lines.append(f"  Question: {pending_q}")
+        lines.append(
+            f"  Resume with: argos-agent resume {row.get('id')} --answer '<your response>'"
+        )
+        lines.append("")
+
+    lines.append(sep)
+    return "\n".join(lines)
+
+
+def _format_evidence_entries(entries: list, what: str, tail: int) -> str:
+    """Human-readable format for evidence log entries."""
+    if not entries:
+        return f"  (no {what} entries)"
+    selected = entries[-tail:] if tail > 0 else entries
+    lines = []
+    for i, e in enumerate(selected):
+        if what == "commands":
+            lines.append(
+                f"  [{e.get('ts', '?'):<27}] {e.get('machine', '?'):<8} "
+                f"exit={e.get('exit_code'):<4} dur={e.get('duration_ms')}ms"
+            )
+            lines.append(f"      cmd: {_truncate(e.get('cmd', ''), 120)}")
+            stdout = _truncate((e.get("stdout") or "").strip().replace("\n", " | "), 150)
+            if stdout:
+                lines.append(f"      out: {stdout}")
+            stderr = _truncate((e.get("stderr") or "").strip().replace("\n", " | "), 150)
+            if stderr:
+                lines.append(f"      err: {stderr}")
+        elif what == "errors":
+            lines.append(
+                f"  [{e.get('ts', '?'):<27}] iter={e.get('iter'):<4} "
+                f"phase={e.get('phase', '?'):<10} code={e.get('code', '?')}"
+            )
+            lines.append(f"      {_truncate(e.get('msg', ''), 200)}")
+        elif what == "decisions":
+            lines.append(
+                f"  [{e.get('ts', '?'):<27}] iter={e.get('iter'):<4} "
+                f"phase={e.get('phase', '?'):<10} action={e.get('action', '?')}"
+            )
+            lines.append(f"      {_truncate(e.get('reason', ''), 200)}")
+        elif what == "llm_calls":
+            cost = e.get("cost_eur")
+            cost_str = f"{cost:.4f}" if cost is not None else "N/A"
+            lines.append(
+                f"  [{e.get('ts', '?'):<27}] {e.get('provider', '?'):<8} "
+                f"{e.get('model', '?'):<24} in={e.get('tokens_in'):<6} "
+                f"out={e.get('tokens_out'):<6} eur={cost_str}"
+            )
+        elif what == "verifications":
+            passed = "PASS" if e.get("passed") else "FAIL"
+            lines.append(
+                f"  [{e.get('ts', '?'):<27}] rule={e.get('rule_id'):<4} "
+                f"{e.get('rule_type', '?'):<12} {passed}"
+            )
+            if e.get("details"):
+                lines.append(f"      {_truncate(e.get('details', ''), 200)}")
+        else:
+            lines.append(f"  {json.dumps(e, default=str)[:200]}")
+    return "\n".join(lines)
+
+
+# ============================================================================
+# Subcommands
+# ============================================================================
+
+
+async def cmd_start(args) -> int:
+    """Create a new agent session and run it (foreground by default)."""
+    if args.detached:
+        print("[argos-agent] NOTE: --detached mode not implemented in Session 2, running foreground")
+
+    pool = None
+    session_id = None
+    try:
+        pool = await _get_pool()
+        async with pool.acquire() as conn:
+            session_id = await conn.fetchval(
+                """
+                INSERT INTO agent_sessions
+                    (title, goal, phase, max_iterations, autonomy_level,
+                     llm_provider, created_by, active)
+                VALUES ($1, $2, 'starting', $3, $4, $5, 'cli', TRUE)
+                RETURNING id
+                """,
+                args.title or f"CLI session: {_truncate(args.goal, 40)}",
+                args.goal,
+                args.max_iter,
+                args.autonomy,
+                "claude",
+            )
+        print(f"[argos-agent] Created session #{session_id}")
+        print(f"[argos-agent] Goal: {_truncate(args.goal, 200)}")
+        print(f"[argos-agent] Autonomy level: {args.autonomy}")
+        print(f"[argos-agent] Max iterations: {args.max_iter}")
+    except Exception as e:
+        print(f"[argos-agent] ERROR creating session: {e}", file=sys.stderr)
+        if pool is not None:
+            await pool.close()
+        return 2
+    finally:
+        if pool is not None:
+            await pool.close()
+
+    # Now run the loop. run_agent_loop builds its own pool.
+    print(f"[argos-agent] Starting loop for session #{session_id}...")
+    print("-" * 70)
+    try:
+        result = await agent_loop.run_agent_loop(session_id)
+    except Exception as e:
+        print(f"[argos-agent] Loop fatal error: {e}", file=sys.stderr)
+        traceback.print_exc()
+        return 2
+
+    print("-" * 70)
+    print(f"[argos-agent] Final: {result}")
+    phase = result.get("phase")
+    if phase == "complete":
+        return 0
+    if phase == "paused":
+        return 0  # paused is not an error
+    return 1
+
+
+async def cmd_status(args) -> int:
+    """Show session status (list or detail)."""
+    pool = None
+    try:
+        pool = await _get_pool()
+        if args.session_id is None:
+            # List mode: last 10 sessions by last_active_at.
+            async with pool.acquire() as conn:
+                rows = await conn.fetch(
+                    """
+                    SELECT id, title, goal, phase, iteration, max_iterations,
+                           active, last_active_at
+                    FROM agent_sessions
+                    ORDER BY last_active_at DESC
+                    LIMIT 10
+                    """
+                )
+            if not rows:
+                print("  (no sessions found)")
+                return 0
+            print(f"Recent agent sessions (last {len(rows)}):")
+            print("")
+            for row in rows:
+                print(_format_session_short(dict(row)))
+                print("")
+            return 0
+
+        # Detail mode: full info for one session.
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT * FROM agent_sessions WHERE id = $1",
+                args.session_id,
+            )
+        if row is None:
+            print(f"[argos-agent] Session #{args.session_id} not found", file=sys.stderr)
+            return 1
+        row_dict = dict(row)
+        ev = _parse_evidence(row_dict.get("evidence"))
+        print(_format_session_detail(row_dict, ev))
+        return 0
+    except Exception as e:
+        print(f"[argos-agent] ERROR: {e}", file=sys.stderr)
+        return 2
+    finally:
+        if pool is not None:
+            await pool.close()
+
+
+async def cmd_resume(args) -> int:
+    """Resume a session, optionally with a clarification answer."""
+    print(f"[argos-agent] Resuming session #{args.session_id}...")
+    if args.answer:
+        print(f"[argos-agent] Clarification answer: {_truncate(args.answer, 100)}")
+    print("-" * 70)
+    try:
+        result = await agent_loop.run_agent_loop(
+            args.session_id,
+            clarification_answer=args.answer,
+        )
+    except Exception as e:
+        print(f"[argos-agent] Resume fatal error: {e}", file=sys.stderr)
+        traceback.print_exc()
+        return 2
+    print("-" * 70)
+    print(f"[argos-agent] Final: {result}")
+    phase = result.get("phase")
+    if phase == "complete":
+        return 0
+    if phase == "paused":
+        return 0
+    return 1
+
+
+async def cmd_logs(args) -> int:
+    """Show evidence entries from a session in human-readable form."""
+    pool = None
+    try:
+        pool = await _get_pool()
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT id, title, evidence FROM agent_sessions WHERE id = $1",
+                args.session_id,
+            )
+        if row is None:
+            print(f"[argos-agent] Session #{args.session_id} not found", file=sys.stderr)
+            return 1
+
+        ev = _parse_evidence(row["evidence"])
+        title = row["title"] or "(no title)"
+        print(f"Evidence log for session #{args.session_id}: {title}")
+        print("=" * 70)
+
+        what = args.what
+        if what == "all":
+            for key in ("commands", "verifications", "errors", "decisions", "llm_calls"):
+                entries = ev.get(key, [])
+                print(f"\n## {key} ({len(entries)} total, showing last {args.tail})")
+                print(_format_evidence_entries(entries, key, args.tail))
+        else:
+            entries = ev.get(what, [])
+            print(f"\n## {what} ({len(entries)} total, showing last {args.tail})")
+            print(_format_evidence_entries(entries, what, args.tail))
+        return 0
+    except Exception as e:
+        print(f"[argos-agent] ERROR: {e}", file=sys.stderr)
+        return 2
+    finally:
+        if pool is not None:
+            await pool.close()
+
+
+async def cmd_stop(args) -> int:
+    """Cancel a running session by setting active=FALSE + phase=cancelled."""
+    pool = None
+    try:
+        pool = await _get_pool()
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT id, phase, active FROM agent_sessions WHERE id = $1",
+                args.session_id,
+            )
+            if row is None:
+                print(f"[argos-agent] Session #{args.session_id} not found", file=sys.stderr)
+                return 1
+            if row["phase"] in ("complete", "failed", "cancelled"):
+                print(
+                    f"[argos-agent] Session #{args.session_id} already in terminal state: "
+                    f"{row['phase']}"
+                )
+                return 0
+            await conn.execute(
+                """
+                UPDATE agent_sessions
+                SET active = FALSE,
+                    phase = 'cancelled',
+                    completed_at = NOW(),
+                    last_active_at = NOW()
+                WHERE id = $1
+                """,
+                args.session_id,
+            )
+        # Append decision for audit via evidence helper.
+        await evidence.append_decision(
+            pool=pool,
+            session_id=args.session_id,
+            phase="cancelled",
+            action="terminal_cancelled",
+            reason="cancelled via argos-agent stop",
+            iteration=-1,
+        )
+        print(f"[argos-agent] Session #{args.session_id} marked cancelled")
+        return 0
+    except Exception as e:
+        print(f"[argos-agent] ERROR: {e}", file=sys.stderr)
+        return 2
+    finally:
+        if pool is not None:
+            await pool.close()
+
+
+# ============================================================================
+# Main / argparse
+# ============================================================================
+
+
+def _build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="argos-agent",
+        description="ARGOS-Commander agent loop CLI (Session 2 MVP)",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    # start
+    p_start = sub.add_parser("start", help="Create a new agent session and run it")
+    p_start.add_argument("goal", help="Goal text for the agent")
+    p_start.add_argument("--autonomy", type=int, default=0,
+                         help="Autonomy ceiling (0=safe default, 1+=bypass require_job)")
+    p_start.add_argument("--max-iter", type=int, default=50,
+                         help="Max iterations before failing (default 50)")
+    p_start.add_argument("--title", type=str, default=None,
+                         help="Optional session title")
+    p_start.add_argument("--detached", action="store_true",
+                         help="Detached mode (NOT implemented in Session 2, ignored)")
+
+    # status
+    p_status = sub.add_parser("status", help="Show session status (list or detail)")
+    p_status.add_argument("session_id", type=int, nargs="?", default=None,
+                          help="Session ID (omit for recent list)")
+
+    # resume
+    p_resume = sub.add_parser("resume", help="Resume a paused or crashed session")
+    p_resume.add_argument("session_id", type=int, help="Session ID to resume")
+    p_resume.add_argument("--answer", type=str, default=None,
+                          help="Answer to a pending clarification request")
+
+    # logs
+    p_logs = sub.add_parser("logs", help="Show evidence log entries")
+    p_logs.add_argument("session_id", type=int, help="Session ID")
+    p_logs.add_argument("--tail", type=int, default=20,
+                        help="Number of entries to show (default 20)")
+    p_logs.add_argument(
+        "--what",
+        type=str,
+        default="commands",
+        choices=["commands", "verifications", "errors", "decisions", "llm_calls", "all"],
+        help="Which evidence key to show (default commands)",
+    )
+
+    # stop
+    p_stop = sub.add_parser("stop", help="Cancel a running session")
+    p_stop.add_argument("session_id", type=int, help="Session ID to stop")
+
+    return parser
+
+
+def main() -> int:
+    parser = _build_parser()
+    args = parser.parse_args()
+
+    dispatch = {
+        "start": cmd_start,
+        "status": cmd_status,
+        "resume": cmd_resume,
+        "logs": cmd_logs,
+        "stop": cmd_stop,
+    }
+    func = dispatch.get(args.command)
+    if func is None:
+        parser.print_help()
+        return 1
+
+    try:
+        return asyncio.run(func(args))
+    except KeyboardInterrupt:
+        print("\n[argos-agent] Interrupted by user", file=sys.stderr)
+        return 1
+    except Exception as e:
+        print(f"[argos-agent] Unhandled exception: {e}", file=sys.stderr)
+        traceback.print_exc()
+        return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main())

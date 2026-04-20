@@ -1,0 +1,12 @@
+#!/run/current-system/sw/bin/bash
+ANTHROPIC_API_KEY=$(grep ANTHROPIC_API_KEY ~/.argos/argos-core/config/.env | cut -d= -f2)
+DB_HOST=11.11.11.111
+DB_PORT=5433
+DB_USER=claude
+DB_PASSWORD=$(grep DB_PASSWORD ~/.argos/argos-core/config/.env | cut -d= -f2)
+DB_NAME=claudedb
+
+export ANTHROPIC_API_KEY DB_HOST DB_PORT DB_USER DB_PASSWORD DB_NAME
+
+nix-shell -p python3 python3Packages.asyncpg python3Packages.httpx --run \
+  "python3 ~/.argos/argos-core/argos_skill_importer.py"

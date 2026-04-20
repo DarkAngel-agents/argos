@@ -1,0 +1,257 @@
+<div class="chats-split" x-data="chatsModule()" x-init="load()">
+
+  <!-- LEFT PANE: conversation list -->
+  <aside class="chats-list-pane">
+    <div class="module module-chats">
+      <div class="mod-header">
+        <h2 class="mod-title">CHATS</h2>
+        <button type="button" class="mod-refresh" @click="load()" :disabled="loading">
+          <span x-show="!loading">&#8635; refresh</span>
+          <span x-show="loading">incarc...</span>
+        </button>
+      </div>
+
+      <div x-show="error" class="mod-error" x-text="error"></div>
+
+      <div class="chats-controls">
+        <div class="filter-chips">
+          <button type="button" class="chip"
+                  :class="filter === 'all' && 'active'"
+                  @click="filter = 'all'">all</button>
+          <button type="button" class="chip"
+                  :class="filter === 'chats' && 'active'"
+                  @click="filter = 'chats'">chats</button>
+          <button type="button" class="chip"
+                  :class="filter === 'sessions' && 'active'"
+                  @click="filter = 'sessions'">sessions</button>
+          <button type="button" class="chip"
+                  :class="showArchived && 'active'"
+                  @click="showArchived = !showArchived">show archived</button>
+        </div>
+        <input type="text"
+               class="chats-search"
+               placeholder="search..."
+               x-model="search">
+        <button type="button" class="chats-newconv" @click="newConv()">+ new conv</button>
+      </div>
+
+      <div class="chats-section">
+        <div class="chats-section-header">&#9472; ACTIVE &#9472;</div>
+        <div class="chats-list">
+          <template x-for="c in filteredActive" :key="'c:' + c.id">
+            <div class="chat-item"
+                 :class="selectedConvId === c.id && 'chat-item-selected'"
+                 @click="selectConv(c.id)">
+              <div class="chat-icon">&#128172;</div>
+              <div class="chat-body">
+                <div class="chat-title">
+                  <span x-show="c.id === 1" class="chat-instant-tag">Instant</span>
+                  <span x-show="c.id !== 1">#<span x-text="c.id"></span> <span x-text="c.title"></span></span>
+                </div>
+                <div class="chat-meta">
+                  <span x-text="c.id === 1 ? 'scratch' : 'chat'"></span>
+                  &#183; <span x-text="formatTime(c.updated_at)"></span>
+                </div>
+              </div>
+              <button type="button"
+                      x-show="c.id === 1"
+                      class="chat-action"
+                      @click.stop="clearInstant()">[clear]</button>
+              <button type="button"
+                      x-show="c.id !== 1"
+                      class="chat-action"
+                      @click.stop="deleteConv(c.id)"
+                      title="sterge conversatia">&#10005;</button>
+            </div>
+          </template>
+          <div x-show="filteredActive.length === 0" class="nodata">
+            nimic activ care sa corespunda filtrului
+          </div>
+        </div>
+
+        <div class="chats-stub-note">
+          sessions tree (parent_session_id, sub-sessions) = TODO Pas 3 cand Commander runtime e live
+        </div>
+      </div>
+
+      <div class="chats-section" x-show="showArchived">
+        <div class="chats-section-header">&#9472; ARCHIVED &#9472;</div>
+        <div class="chats-list">
+          <template x-for="a in filteredArchived" :key="'a:' + a.id">
+            <div class="chat-item">
+              <div class="chat-icon">&#128230;</div>
+              <div class="chat-body">
+                <div class="chat-title">#<span x-text="a.id"></span> <span x-text="a.title"></span></div>
+                <div class="chat-meta">
+                  archived &#183; <span x-text="formatTime(a.created_at)"></span>
+                  <template x-for="t in (a.tags || [])" :key="t">
+                    <span class="tag-chip" x-text="t"></span>
+                  </template>
+                </div>
+              </div>
+              <button type="button" class="chat-action" @click.stop="resumeArchive(a)">[resume]</button>
+            </div>
+          </template>
+          <div x-show="filteredArchived.length === 0" class="nodata">
+            nici o conversatie arhivata
+          </div>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- RIGHT PANE: chat view -->
+  <section class="chats-view-pane">
+    <div class="chat-view-empty" x-show="!selectedConvId">
+      <div class="empty-icon">&#128172;</div>
+      <div class="empty-text">Selecteaza o conversatie din stanga</div>
+    </div>
+    <div class="chat-view-container" x-ref="viewContainer" x-show="selectedConvId">
+      <div class="chat-view-loading">Selecteaza o conversatie...</div>
+    </div>
+  </section>
+</div>
+
+<script>
+function chatsModule() {
+  return {
+    conversations: [],
+    archives: [],
+    filter: 'all',
+    showArchived: false,
+    search: '',
+    loading: false,
+    error: null,
+    selectedConvId: null,
+
+    async load() {
+      this.loading = true;
+      this.error = null;
+      try {
+        const [rc, ra] = await Promise.all([
+          fetch('/api/conversations').then(r => r.ok ? r.json() : Promise.reject('HTTP ' + r.status)),
+          fetch('/api/archives').then(r => r.ok ? r.json() : Promise.reject('HTTP ' + r.status)),
+        ]);
+        this.conversations = Array.isArray(rc) ? rc : (rc.conversations || []);
+        this.archives = Array.isArray(ra) ? ra : (ra.archives || []);
+      } catch (e) {
+        this.error = 'eroare incarcare chats: ' + e;
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    get filteredActive() {
+      let list = this.conversations;
+      if (this.filter === 'sessions') return [];
+      const s = this.search.toLowerCase().trim();
+      if (s) list = list.filter(c => (c.title || '').toLowerCase().includes(s) || String(c.id).includes(s));
+      return list.slice().sort((a, b) => {
+        if (a.id === 1) return -1;
+        if (b.id === 1) return 1;
+        return (b.updated_at || '').localeCompare(a.updated_at || '');
+      });
+    },
+
+    get filteredArchived() {
+      let list = this.archives;
+      const s = this.search.toLowerCase().trim();
+      if (s) list = list.filter(a => (a.title || '').toLowerCase().includes(s));
+      return list;
+    },
+
+    async selectConv(id) {
+      if (this.selectedConvId === id && this._loadedConvId === id) return;
+      this.selectedConvId = id;
+      await this.$nextTick();
+      const container = this.$refs.viewContainer;
+      if (!container) {
+        console.error('[chats] viewContainer ref missing');
+        return;
+      }
+      const oldRoot = container.querySelector('.chat-view');
+      if (oldRoot && oldRoot._chatViewCleanup) {
+        try { oldRoot._chatViewCleanup(); } catch (e) {}
+      }
+      this._loadedConvId = id;
+      try {
+        const r = await fetch('/ui/modules/chat-view.html?conv=' + id + '&_=' + Date.now());
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const html = await r.text();
+        const tmp = document.createElement('div');
+        tmp.innerHTML = html;
+        const newChild = tmp.querySelector('.chat-view');
+        if (!newChild) throw new Error('chat-view root not found in fragment');
+        newChild.setAttribute('data-conv-id', String(id));
+        while (container.firstChild) {
+          container.removeChild(container.firstChild);
+        }
+        container.appendChild(newChild);
+      } catch (e) {
+        console.error('[chats] failed to load chat-view:', e);
+        container.innerHTML = '<div class="chat-view-loading">Eroare: ' + e.message + '</div>';
+      }
+    },
+
+    async newConv() {
+      const title = prompt('Titlu conversatie noua:');
+      if (!title || !title.trim()) return;
+      try {
+        const r = await fetch('/api/conversations', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({title: title.trim()})
+        });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const data = await r.json();
+        await this.load();
+        this.selectConv(data.id);
+      } catch (e) {
+        alert('Eroare creare: ' + e.message);
+      }
+    },
+
+    async clearInstant() {
+      if (!confirm('Stergi toate mesajele din Instant?')) return;
+      try {
+        const r = await fetch('/api/conversations/1/messages', {method: 'DELETE'});
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        if (this.selectedConvId === 1) this.selectConv(1);
+      } catch (e) {
+        alert('Eroare clear: ' + e.message);
+      }
+    },
+
+    async deleteConv(id) {
+      if (!confirm('Stergi conversatia #' + id + '? Toate mesajele vor fi pierdute.')) return;
+      try {
+        const r = await fetch('/api/conversations/' + id, {method: 'DELETE'});
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        if (this.selectedConvId === id) {
+          this.selectedConvId = null;
+        }
+        await this.load();
+      } catch (e) {
+        alert('Eroare stergere: ' + e.message);
+      }
+    },
+
+    resumeArchive(a) {
+      console.log('TODO: resume archive', a);
+    },
+
+    formatTime(iso) {
+      if (!iso) return '-';
+      try {
+        const d = new Date(iso);
+        const now = new Date();
+        const diff = (now - d) / 1000;
+        if (diff < 60) return 'acum';
+        if (diff < 3600) return Math.floor(diff / 60) + 'm';
+        if (diff < 86400) return Math.floor(diff / 3600) + 'h';
+        return Math.floor(diff / 86400) + 'z';
+      } catch (e) { return iso; }
+    }
+  };
+}
+</script>

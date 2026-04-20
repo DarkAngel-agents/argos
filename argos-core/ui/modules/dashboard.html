@@ -1,0 +1,142 @@
+<div class="module module-dashboard"
+     x-data="dashboardModule()"
+     x-init="load()">
+
+  <div class="mod-header">
+    <h2 class="mod-title">DASHBOARD</h2>
+    <button type="button" class="mod-refresh" @click="load()" :disabled="loading">
+      <span x-show="!loading">↻ refresh</span>
+      <span x-show="loading">incarc...</span>
+    </button>
+  </div>
+
+  <div x-show="error" class="mod-error" x-text="error"></div>
+
+  <div class="cards-grid" x-show="data">
+    <!-- SESSIONS -->
+    <div class="card">
+      <div class="card-title">SESSIONS</div>
+      <div class="card-stats">
+        <div><span class="n" x-text="data?.sessions?.active ?? '-'"></span> active</div>
+        <div><span class="n" x-text="data?.sessions?.complete ?? '-'"></span> complete</div>
+        <div><span class="n" x-text="data?.sessions?.failed ?? '-'"></span> failed</div>
+        <div class="card-total"><span x-text="data?.sessions?.total ?? '-'"></span> total</div>
+      </div>
+      <button type="button" class="card-open" @click="openModule('reasoning')">open →</button>
+    </div>
+
+    <!-- FLEET -->
+    <div class="card">
+      <div class="card-title">FLEET</div>
+      <div class="card-stats">
+        <div class="stub-note" x-text="data?.fleet?.note || 'stub'"></div>
+      </div>
+      <button type="button" class="card-open" @click="openModule('fleet')">open →</button>
+    </div>
+
+    <!-- REASONING -->
+    <div class="card">
+      <div class="card-title">REASONING</div>
+      <div class="card-stats">
+        <div><span class="n" x-text="data?.reasoning?.today ?? '-'"></span> today</div>
+        <div><span class="n" x-text="data?.reasoning?.total ?? '-'"></span> total entries</div>
+      </div>
+      <button type="button" class="card-open" @click="openModule('reasoning')">open →</button>
+    </div>
+
+    <!-- JOBS -->
+    <div class="card">
+      <div class="card-title">JOBS</div>
+      <div class="card-stats">
+        <div><span class="n" x-text="data?.jobs?.waiting ?? '-'"></span> waiting</div>
+        <div><span class="n" x-text="data?.jobs?.running ?? '-'"></span> running</div>
+        <div><span class="n" x-text="data?.jobs?.today ?? '-'"></span> today</div>
+        <div class="card-total"><span x-text="data?.jobs?.total ?? '-'"></span> total</div>
+      </div>
+      <button type="button" class="card-open" @click="openModule('jobs')">open →</button>
+    </div>
+
+    <!-- CHATS -->
+    <div class="card">
+      <div class="card-title">CHATS</div>
+      <div class="card-stats">
+        <div><span class="n" x-text="data?.chats?.conversations ?? '-'"></span> conversations</div>
+        <div><span class="n" x-text="data?.chats?.archived ?? '-'"></span> archived</div>
+        <div class="card-meta">last: <span x-text="formatTime(data?.chats?.last_activity)"></span></div>
+      </div>
+      <button type="button" class="card-open" @click="openModule('chats')">open →</button>
+    </div>
+
+    <!-- HEALTH -->
+    <div class="card">
+      <div class="card-title">HEALTH</div>
+      <div class="card-stats">
+        <div><span class="n" x-text="data?.health?.total_enabled ?? '-'"></span> checks enabled</div>
+        <template x-for="(n, status) in (data?.health?.by_status || {})" :key="status">
+          <div><span class="n" x-text="n"></span> <span x-text="status"></span></div>
+        </template>
+      </div>
+      <button type="button" class="card-open" @click="openModule('health')">open →</button>
+    </div>
+  </div>
+
+  <!-- RECENT ACTIVITY -->
+  <div class="recent-activity" x-show="data">
+    <h3>RECENT ACTIVITY</h3>
+    <div class="recent-note">stub Pas 2 - doar conversations. Pas 3 SSE = toate domeniile.</div>
+    <div class="recent-list">
+      <template x-for="item in (data?.recent_activity || [])" :key="item.kind + ':' + item.id">
+        <div class="recent-row">
+          <span class="recent-kind" x-text="item.kind"></span>
+          <span class="recent-label" x-text="item.label"></span>
+          <span class="recent-ts" x-text="formatTime(item.ts)"></span>
+        </div>
+      </template>
+      <div x-show="(data?.recent_activity || []).length === 0" class="nodata">
+        nimic recent
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function dashboardModule() {
+  return {
+    data: null,
+    loading: false,
+    error: null,
+    async load() {
+      this.loading = true;
+      this.error = null;
+      try {
+        const r = await fetch('/api/dashboard/summary');
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        this.data = await r.json();
+      } catch (e) {
+        this.error = 'eroare incarcare dashboard: ' + e.message;
+      } finally {
+        this.loading = false;
+      }
+    },
+    openModule(name) {
+      // Trigger module switch via Alpine root scope
+      const root = this.$root.closest('.shell').__x?.$data || document.querySelector('.shell')._x_dataStack?.[0];
+      if (root) root.activeModule = name;
+      // htmx fetch the module
+      htmx.ajax('GET', '/ui/modules/' + name + '.html', {target: '#central-slot', swap: 'innerHTML'});
+    },
+    formatTime(iso) {
+      if (!iso) return '-';
+      try {
+        const d = new Date(iso);
+        const now = new Date();
+        const diff = (now - d) / 1000;
+        if (diff < 60) return 'acum';
+        if (diff < 3600) return Math.floor(diff / 60) + 'm';
+        if (diff < 86400) return Math.floor(diff / 3600) + 'h';
+        return Math.floor(diff / 86400) + 'z';
+      } catch (e) { return iso; }
+    }
+  };
+}
+</script>

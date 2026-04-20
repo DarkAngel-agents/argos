@@ -1,0 +1,45 @@
+services:
+  argos-db:
+    image: postgres:16-alpine
+    container_name: argos-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: claude
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme}
+      POSTGRES_DB: claudedb
+    volumes:
+      - argos-pgdata:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U claude -d claudedb"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  argos-app:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: argos-app
+    restart: unless-stopped
+    depends_on:
+      argos-db:
+        condition: service_healthy
+    env_file:
+      - ../.argos.env
+    environment:
+      DB_HOST: argos-db
+      DB_PORT: 5432
+    volumes:
+      - ../argos-core:/home/darkangel/.argos/argos-core
+    ports:
+      - "666:8000"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  argos-pgdata:

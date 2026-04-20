@@ -1,0 +1,296 @@
+#!/usr/bin/env python3.13
+"""
+ARGOS file indexer - parser generalizat pentru fisiere cu @zone/@sub tags
+Inlocuieste nixos_index.py pentru fisiere noi.
+Ruleaza: argos-file-indexer <path>  sau  argos-file-indexer --all
+"""
+import asyncio
+import asyncpg
+import os
+import re
+import sys
+import json
+from dotenv import load_dotenv
+
+load_dotenv(os.path.expanduser("~/.argos/argos-core/config/.env"))
+
+TAG_RE = re.compile(r'@(\w[\w-]*):([^\s@]+)')
+
+FILE_TYPE_MAP = {
+    '.py': 'python', '.nix': 'nix', '.sh': 'bash', '.bash': 'bash',
+    '.yaml': 'yaml', '.yml': 'yaml', '.sql': 'sql', '.js': 'javascript',
+    '.ts': 'typescript', '.json': 'json', '.md': 'markdown', '.txt': 'text',
+    '.conf': 'config', '.toml': 'toml',
+}
+
+def detect_file_type(path: str) -> str:
+    ext = os.path.splitext(path)[1].lower()
+    return FILE_TYPE_MAP.get(ext, 'unknown')
+
+def parse_tags(line: str) -> dict:
+    """Extrage toate @key:value dintr-o linie"""
+    return {m.group(1): m.group(2) for m in TAG_RE.finditer(line)}
+
+def parse_file(content: str) -> tuple:
+    """
+    Returneaza (zones, errors, heartbeats)
+    - zones: lista dicts pentru file_index
+    - errors: lista (code, file_path, zone) pentru update error_codes
+    - heartbeats: lista dicts pentru heartbeat_checks
+    """
+    lines = content.splitlines()
+    zones = []
+    errors = []
+    heartbeats = []
+    
+    current_zone = None
+    current_sub = None
+    
+    # pentru bloc @heartbeat multi-linie
+    current_hb = None
+    
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        tags = parse_tags(line)
+        
+        # 1. Bloc @heartbeat - citeste linii consecutive cu @
+        if 'heartbeat' in tags and current_hb is None:
+            current_hb = {
+                'check_name': tags['heartbeat'],
+                'component': tags.get('component', 'unknown'),
+                'display_name': tags.get('display', tags['heartbeat']),
+                'display_group': tags.get('group', 'General'),
+                'display_order': int(tags.get('order', 100)),
+                'icon': tags.get('icon'),
+                'unit': tags.get('unit'),
+                'file_path': None,  # se completeaza la apel
+                'zone': current_zone['zone'] if current_zone else None,
+                'description': tags.get('desc'),
+                'extra_tags': {k: v for k, v in tags.items() 
+                              if k not in ('heartbeat', 'component', 'display', 'group', 'order', 'icon', 'unit', 'desc')}
+            }
+            # citeste liniile urmatoare care au @ dar nu @heartbeat/@zone/@sub
+            j = i + 1
+            while j < len(lines):
+                next_tags = parse_tags(lines[j])
+                if not next_tags:
+                    break
+                if any(k in next_tags for k in ('heartbeat', 'zone', 'sub')):
+                    break
+                # absorb tags
+                for k, v in next_tags.items():
+                    if k == 'group': current_hb['display_group'] = v
+                    elif k == 'order': current_hb['display_order'] = int(v)
+                    elif k == 'icon': current_hb['icon'] = v
+                    elif k == 'unit': current_hb['unit'] = v
+                    elif k == 'desc': current_hb['description'] = v
+                    elif k == 'component': current_hb['component'] = v
+                    elif k == 'display': current_hb['display_name'] = v
+                    elif k.startswith('threshold') or k in ('warn', 'crit', 'ok'):
+                        current_hb['extra_tags'][k] = v
+                    else:
+                        current_hb['extra_tags'][k] = v
+                j += 1
+            heartbeats.append(current_hb)
+            current_hb = None
+            i = j
+            continue
+        
+        # 2. @sub - sub-zone in zona curenta
+        if 'sub' in tags:
+            # inchide sub anterior
+            if current_sub:
+                current_sub['line_end'] = i  # linie 1-indexed pana la cea anterioara
+                zones.append(current_sub)
+            # sub nou
+            current_sub = {
+                'zone': current_zone['zone'] if current_zone else 'orphan',
+                'sub_zone': tags['sub'],
+                'parent_zone': current_zone['zone'] if current_zone else None,
+                'managed_by': tags.get('managed', current_zone['managed_by'] if current_zone else 'human'),
+                'critical': tags.get('critical', 'false').lower() == 'true',
+                'restart_required': tags.get('restart'),
+                'autonomy_level': int(tags['autonomy']) if 'autonomy' in tags else None,
+                'line_start': i + 1,
+                'line_end': None,
+                'tags': tags,
+                'description': line.strip().lstrip('#').strip()
+            }
+            if 'error' in tags:
+                errors.append((tags['error'], current_zone['zone'] if current_zone else None, tags['sub']))
+            i += 1
+            continue
+        
+        # 3. @zone - zona top-level
+        if 'zone' in tags:
+            # inchide sub anterior
+            if current_sub:
+                current_sub['line_end'] = i
+                zones.append(current_sub)
+                current_sub = None
+            # inchide zona anterioara
+            if current_zone:
+                current_zone['line_end'] = i
+                zones.append(current_zone)
+            current_zone = {
+                'zone': tags['zone'],
+                'sub_zone': None,
+                'parent_zone': None,
+                'managed_by': tags.get('managed', 'human'),
+                'critical': tags.get('critical', 'false').lower() == 'true',
+                'restart_required': tags.get('restart'),
+                'autonomy_level': int(tags['autonomy']) if 'autonomy' in tags else None,
+                'line_start': i + 1,
+                'line_end': None,
+                'tags': tags,
+                'description': line.strip().lstrip('#').strip()
+            }
+            if 'error' in tags:
+                errors.append((tags['error'], tags['zone'], None))
+            i += 1
+            continue
+        
+        i += 1
+    
+    # inchide ultimele
+    if current_sub:
+        current_sub['line_end'] = len(lines)
+        zones.append(current_sub)
+    if current_zone:
+        current_zone['line_end'] = len(lines)
+        zones.append(current_zone)
+    
+    return zones, errors, heartbeats
+
+async def index_file(pool, file_path: str, verbose: bool = True):
+    """Indexeaza un fisier - delete old + insert new"""
+    if not os.path.exists(file_path):
+        print(f"[SKIP] {file_path} nu exista")
+        return 0
+    
+    with open(file_path, 'r') as f:
+        content = f.read()
+    
+    zones, errors, heartbeats = parse_file(content)
+    file_type = detect_file_type(file_path)
+    
+    async with pool.acquire() as conn:
+        # delete vechi
+        await conn.execute("DELETE FROM file_index WHERE file_path = $1", file_path)
+        
+        # insert zones
+        for z in zones:
+            await conn.execute(
+                """INSERT INTO file_index
+                   (file_path, file_type, zone, sub_zone, parent_zone,
+                    managed_by, critical, restart_required, line_start, line_end,
+                    autonomy_level, tags, description, updated_at)
+                   VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,NOW())
+                   ON CONFLICT (file_path, zone, sub_zone) DO UPDATE SET
+                     line_start=EXCLUDED.line_start,
+                     line_end=EXCLUDED.line_end,
+                     managed_by=EXCLUDED.managed_by,
+                     critical=EXCLUDED.critical,
+                     restart_required=EXCLUDED.restart_required,
+                     autonomy_level=EXCLUDED.autonomy_level,
+                     tags=EXCLUDED.tags,
+                     description=EXCLUDED.description,
+                     updated_at=NOW()""",
+                file_path, file_type, z['zone'], z['sub_zone'], z['parent_zone'],
+                z['managed_by'], z['critical'], z['restart_required'],
+                z['line_start'], z['line_end'],
+                z['autonomy_level'], json.dumps(z['tags']), z['description']
+            )
+        
+        # update error_codes
+        for code, zone, sub in errors:
+            try:
+                await conn.execute(
+                    "UPDATE error_codes SET file_path=$1, zone=$2 WHERE code=$3",
+                    file_path, sub or zone, code
+                )
+            except Exception as e:
+                print(f"  [WARN] error_codes update failed pentru {code}: {e}")
+        
+        # upsert heartbeat_checks
+        for hb in heartbeats:
+            hb['file_path'] = file_path
+            try:
+                await conn.execute(
+                    """INSERT INTO heartbeat_checks
+                       (component, check_name, display_name, display_order, display_group,
+                        icon, file_path, zone, unit, description, updated_at)
+                       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW())
+                       ON CONFLICT (component, check_name) DO UPDATE SET
+                         display_name=EXCLUDED.display_name,
+                         display_order=EXCLUDED.display_order,
+                         display_group=EXCLUDED.display_group,
+                         icon=EXCLUDED.icon,
+                         file_path=EXCLUDED.file_path,
+                         zone=EXCLUDED.zone,
+                         unit=EXCLUDED.unit,
+                         description=EXCLUDED.description,
+                         updated_at=NOW()""",
+                    hb['component'], hb['check_name'], hb['display_name'],
+                    hb['display_order'], hb['display_group'], hb['icon'],
+                    hb['file_path'], hb['zone'], hb['unit'], hb['description']
+                )
+            except Exception as e:
+                print(f"  [WARN] heartbeat upsert failed pentru {hb['check_name']}: {e}")
+        
+        # update indexed_files
+        await conn.execute(
+            """INSERT INTO indexed_files (file_path, file_type, auto_update, last_indexed, zones_count, notes)
+               VALUES ($1, $2, TRUE, NOW(), $3, 'auto-added by indexer')
+               ON CONFLICT (file_path) DO UPDATE SET
+                 last_indexed=NOW(),
+                 zones_count=EXCLUDED.zones_count,
+                 file_type=EXCLUDED.file_type""",
+            file_path, file_type, len(zones)
+        )
+    
+    if verbose:
+        print(f"[OK] {file_path}")
+        print(f"     zones: {len(zones)}, errors: {len(errors)}, heartbeats: {len(heartbeats)}")
+        for z in sorted(zones, key=lambda x: x['line_start']):
+            crit = '!' if z['critical'] else ' '
+            sub = f"/{z['sub_zone']}" if z['sub_zone'] else ''
+            print(f"     {crit} L{z['line_start']:4}-{z['line_end']:4} {z['zone']}{sub} [{z['managed_by']}]")
+    
+    return len(zones)
+
+async def main():
+    if len(sys.argv) < 2:
+        print("Usage: argos-file-indexer <file_path>  |  --all  |  --list")
+        sys.exit(1)
+    
+    pool = await asyncpg.create_pool(
+        host=os.getenv("DB_HOST"), port=int(os.getenv("DB_PORT", 5432)),
+        user=os.getenv("DB_USER"), password=os.getenv("DB_PASSWORD"),
+        database=os.getenv("DB_NAME"), ssl=False
+    )
+    
+    arg = sys.argv[1]
+    
+    if arg == '--list':
+        async with pool.acquire() as conn:
+            rows = await conn.fetch("SELECT file_path, file_type, last_indexed, zones_count, auto_update FROM indexed_files ORDER BY file_path")
+            for r in rows:
+                auto = 'AUTO' if r['auto_update'] else 'MANUAL'
+                last = r['last_indexed'].strftime('%Y-%m-%d %H:%M') if r['last_indexed'] else 'never'
+                print(f"  [{auto}] {r['file_path']} ({r['file_type']}) - {r['zones_count']} zones - {last}")
+    elif arg == '--all':
+        async with pool.acquire() as conn:
+            rows = await conn.fetch("SELECT file_path FROM indexed_files WHERE auto_update=TRUE ORDER BY file_path")
+        total = 0
+        for r in rows:
+            total += await index_file(pool, r['file_path'], verbose=True)
+        print(f"\n[DONE] {len(rows)} fisiere, {total} zone totale")
+    else:
+        await index_file(pool, arg, verbose=True)
+    
+    await pool.close()
+
+if __name__ == '__main__':
+    asyncio.run(main())

@@ -1,0 +1,175 @@
+<div class="module module-fleet"
+     x-data="fleetModule()"
+     x-init="load()">
+
+  <div class="mod-header">
+    <h2 class="mod-title">FLEET</h2>
+    <button type="button" class="mod-refresh" @click="load()" :disabled="loading">
+      <span x-show="!loading">&#8635; refresh</span>
+      <span x-show="loading">incarc...</span>
+    </button>
+  </div>
+
+  <div x-show="error" class="mod-error" x-text="error"></div>
+
+  <div x-show="data" class="fleet-summary">
+    <span><b x-text="data?.counts?.total ?? 0"></b> total</span>
+    <span class="dot online"></span><b x-text="data?.counts?.online ?? 0"></b> online
+    <span class="dot announced"></span><b x-text="data?.counts?.announced ?? 0"></b> announced
+    <span class="dot installing"></span><b x-text="data?.counts?.installing ?? 0"></b> installing
+    <span class="dot offline"></span><b x-text="data?.counts?.offline ?? 0"></b> offline
+  </div>
+
+  <div class="fleet-controls">
+    <div class="filter-chips">
+      <button type="button" class="chip" :class="filter === 'all' && 'active'" @click="filter = 'all'">all</button>
+      <button type="button" class="chip" :class="filter === 'known' && 'active'" @click="filter = 'known'">known</button>
+      <button type="button" class="chip" :class="filter === 'nanite' && 'active'" @click="filter = 'nanite'">nanite</button>
+      <button type="button" class="chip" :class="filter === 'online' && 'active'" @click="filter = 'online'">online</button>
+      <button type="button" class="chip" :class="filter === 'offline' && 'active'" @click="filter = 'offline'">offline</button>
+    </div>
+    <input type="text" class="chats-search" placeholder="search name/ip..." x-model="search">
+  </div>
+
+  <div class="fleet-list" x-show="data">
+    <template x-for="item in filteredItems" :key="item.id">
+      <div class="fleet-row" :class="'status-' + item.status">
+        <div class="fleet-status-col">
+          <span class="dot" :class="item.status"></span>
+        </div>
+        <div class="fleet-main">
+          <div class="fleet-name">
+            <span x-text="item.display_name || item.name"></span>
+            <span class="fleet-type-badge" x-text="item.type"></span>
+          </div>
+          <div class="fleet-meta">
+            <span x-text="item.ip || '-'"></span>
+            <span x-text="item.os_type || ''"></span>
+            <span x-show="item.role" x-text="item.role"></span>
+            <span class="fleet-status-text" x-text="item.status"></span>
+          </div>
+          <div class="fleet-hw" x-show="item.hw_summary" x-text="item.hw_summary"></div>
+        </div>
+        <div class="fleet-actions">
+          <button type="button" x-show="item.status === 'online'" class="fleet-talk"
+                  @click="talkTo(item)">talk</button>
+          <button type="button" x-show="item.status === 'announced'" class="fleet-install"
+                  @click="installNanite(item)">[install]</button>
+          <span x-show="item.status === 'installing'" class="fleet-progress">installing...</span>
+          <button type="button" class="chat-action" @click.stop="deleteItem(item)"
+                  title="sterge din fleet">&#10005;</button>
+        </div>
+      </div>
+    </template>
+    <div x-show="filteredItems.length === 0" class="nodata">
+      nimic in fleet care sa corespunda filtrului
+    </div>
+  </div>
+</div>
+
+<script>
+function fleetModule() {
+  return {
+    data: null,
+    filter: 'all',
+    search: '',
+    loading: false,
+    error: null,
+
+    async load() {
+      this.loading = true;
+      this.error = null;
+      try {
+        var r = await fetch('/api/fleet');
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        this.data = await r.json();
+      } catch (e) {
+        this.error = 'eroare incarcare fleet: ' + e.message;
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    get filteredItems() {
+      var list = this.data?.fleet || [];
+      if (this.filter === 'known')   list = list.filter(function(x) { return x.type === 'known'; });
+      if (this.filter === 'nanite')  list = list.filter(function(x) { return x.type === 'nanite'; });
+      if (this.filter === 'online')  list = list.filter(function(x) { return x.online; });
+      if (this.filter === 'offline') list = list.filter(function(x) { return !x.online && x.status === 'offline'; });
+      var s = this.search.toLowerCase().trim();
+      if (s) list = list.filter(function(x) {
+        return (x.name || '').toLowerCase().indexOf(s) >= 0 ||
+               (x.display_name || '').toLowerCase().indexOf(s) >= 0 ||
+               (x.ip || '').indexOf(s) >= 0;
+      });
+      return list;
+    },
+
+    async deleteItem(item) {
+      var name = item.display_name || item.name;
+      if (!confirm('Stergi ' + name + ' din fleet?')) return;
+      try {
+        var url;
+        if (item.type === 'nanite') {
+          url = '/api/fleet/nanite/' + (item.node_id || item.name);
+        } else {
+          url = '/api/fleet/known/' + item.raw_id;
+        }
+        var r = await fetch(url, {method: 'DELETE'});
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        await this.load();
+      } catch (e) {
+        alert('Eroare stergere: ' + e.message);
+      }
+    },
+
+    async installNanite(item) {
+      var title = (item.display_name || item.name) + ' @ ' + (item.ip || 'unknown');
+      var msg = 'Nanite ' + (item.node_id || item.name) + ' anuntat la ' + (item.ip || '?') + '.\n';
+      msg += 'Hardware: ' + (item.hw_summary || 'necunoscut') + '\n';
+      msg += 'Arch: ' + (item.arch || '?') + ', UEFI: ' + (item.uefi ? 'da' : 'nu') + '\n\n';
+      msg += 'Ce sistem vrei sa instalez pe aceasta masina?';
+      try {
+        var r = await fetch('/api/conversations', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({title: title})
+        });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        var conv = await r.json();
+        await fetch('/api/messages', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({conversation_id: conv.id, content: msg})
+        });
+        alert('Conversatie #' + conv.id + ' creata. Mergi in Chats.');
+      } catch (e) {
+        alert('Eroare: ' + e.message);
+      }
+    },
+
+    async talkTo(item) {
+      var title = (item.display_name || item.name) + ' @ ' + (item.ip || 'unknown');
+      var msg = 'Vreau sa lucrez pe ' + (item.display_name || item.name);
+      msg += ' (' + (item.ip || '?') + ', ' + (item.os_type || '?') + ').';
+      try {
+        var r = await fetch('/api/conversations', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({title: title})
+        });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        var conv = await r.json();
+        await fetch('/api/messages', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({conversation_id: conv.id, content: msg})
+        });
+        alert('Conversatie #' + conv.id + ' creata. Mergi in Chats.');
+      } catch (e) {
+        alert('Eroare: ' + e.message);
+      }
+    }
+  };
+}
+</script>
