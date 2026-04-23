@@ -34,8 +34,6 @@ curl -sk -H "X-API-KEY: <key>" https://10.0.10.1/proxy/network/api/s/default/sta
 ## Gotchas
 - API key in header X-API-KEY, nu Bearer
 - HTTPS cu cert self-signed: curl -sk
-- Home API key: sZua7nHgQoxenkyDrt-9vXRBx7_z-3e8
-- Cristin API key: 2rZ4NX8PIJTtmivK6LvAHFGt9xpdfuA9
 - CITESTE inainte de orice actiune, VERIFICA dupa, rollback 30s
 
 ## SSH UDM Pro (ultima varianta, doar cand API nu merge)
