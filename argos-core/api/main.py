@@ -175,8 +175,8 @@ async def lifespan(app: FastAPI):
                 password=os.getenv("DB_PASSWORD"),
                 database=os.getenv("DB_NAME"),
                 ssl=False,
-                min_size=1,
-                max_size=5,
+                min_size=2,
+                max_size=10,
                 timeout=3,
                 max_inactive_connection_lifetime=25,
                 command_timeout=60,
@@ -267,7 +267,7 @@ async def get_pool():
                 user=os.getenv("DB_USER"),
                 password=os.getenv("DB_PASSWORD"),
                 database=os.getenv("DB_NAME"),
-                ssl=False, min_size=1, max_size=5,
+                ssl=False, min_size=2, max_size=10,
                 max_inactive_connection_lifetime=25,
                 command_timeout=60
             )
@@ -309,6 +309,7 @@ from api.conversations import router as conversations_router
 from api.fleet import router as fleet_router
 from api.stream import router as stream_router
 from api.health import router as health_router
+from api.claude_code_api import router as claude_code_router
 app.include_router(chat_router, prefix="/api")
 app.include_router(compress_router, prefix="/api")
 app.include_router(executor_router, prefix="/api")
@@ -324,6 +325,7 @@ app.include_router(conversations_router, prefix="/api")
 app.include_router(fleet_router, prefix="/api")
 app.include_router(stream_router, prefix="/api")
 app.include_router(health_router, prefix="/api")
+app.include_router(claude_code_router, prefix="/api")
 
 
 # UI v1 redesign - workflow paralel, nu atinge UI vechi (ruta /)
