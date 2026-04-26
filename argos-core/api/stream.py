@@ -8,6 +8,7 @@ import json
 from datetime import datetime, timezone
 from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
+from api.rate_limit import limiter
 
 
 router = APIRouter()
@@ -19,6 +20,7 @@ def _sse(event: str, data: dict) -> str:
 
 
 @router.get("/stream/activity")
+@limiter.limit("10/minute")  # audit N6 — cap SSE connection rate per IP
 async def stream_activity(request: Request):
     """
     Single SSE stream for ARGOS live activity.

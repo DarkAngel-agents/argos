@@ -14,8 +14,10 @@ Endpoints:
 Debug codes: [CCAPI NNN]
 """
 import json
+import os
 import re
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
+from api.rate_limit import limiter
 from pydantic import BaseModel
 from typing import Optional, Any, Dict
 
@@ -476,3 +478,333 @@ async def decide_approval(approval_id: int, req: ApprovalDecision):
         "reason": req.reason,
         "status": req.decision,
     }
+
+
+# =============================================================================
+# Faza B Pas 5 pivot: hook HTTP direct (alternativa la hook Rust command)
+# Issue upstream: https://github.com/anthropics/claude-code/issues/52822
+# =============================================================================
+
+import asyncio
+
+_CC_TOOL_TO_KIND = {
+    "Write": "cc_file",
+    "Edit": "cc_file",
+    "MultiEdit": "cc_file",
+    "NotebookEdit": "cc_file",
+    "Bash": "cc_bash",
+}
+
+_HOOK_POLL_INTERVAL = 1.0
+_HOOK_MAX_TIMEOUT = 300
+
+
+def _build_cc_intent(tool_name: str, tool_input: dict):
+    ti = tool_input or {}
+
+    if tool_name == "Write":
+        path = ti.get("file_path", "?")
+        content = ti.get("content", "")
+        ij = {
+            "operation": "write",
+            "path": path,
+            "size": len(content) if isinstance(content, str) else None,
+        }
+        return "cc_file", f"cc_file write: {path}", ij
+
+    if tool_name in ("Edit", "NotebookEdit"):
+        path = ti.get("file_path") or ti.get("notebook_path") or "?"
+        ij = {"operation": "edit", "path": path}
+        return "cc_file", f"cc_file edit: {path}", ij
+
+    if tool_name == "MultiEdit":
+        path = ti.get("file_path", "?")
+        edits = ti.get("edits", [])
+        ij = {"operation": "multiedit", "path": path, "edits_count": len(edits)}
+        return "cc_file", f"cc_file multiedit ({len(edits)} edits): {path}", ij
+
+    if tool_name == "Bash":
+        cmd = ti.get("command", "")
+        desc = ti.get("description", "")
+        ij = {"command": cmd, "target": "local", "description": desc}
+        short = cmd if len(cmd) <= 120 else cmd[:120] + "..."
+        return "cc_bash", f"cc_bash: {short}", ij
+
+    ij = {"tool": tool_name, "args": ti}
+    return "cc_tool", f"cc_tool: {tool_name}", ij
+
+
+class HookPayload(BaseModel):
+    session_id: Optional[str] = None
+    transcript_path: Optional[str] = None
+    cwd: Optional[str] = None
+    permission_mode: Optional[str] = None
+    hook_event_name: str = "PreToolUse"
+    tool_name: str
+    tool_input: Dict[str, Any] = {}
+    tool_use_id: Optional[str] = None
+
+
+@router.post("/cc/hook")
+@limiter.limit("120/minute")  # audit N5 — block flood of unauth hook posts
+async def cc_hook(request: Request, payload: HookPayload):
+    if payload.hook_event_name not in ("PreToolUse", "PermissionRequest"):
+        return {"continue": True}
+
+    kind, intent_text, intent_json = _build_cc_intent(
+        payload.tool_name, payload.tool_input
+    )
+
+    refuse_reason = _check_hard_refuse(kind, intent_json)
+    if refuse_reason:
+        return {
+            "hookSpecificOutput": {
+                "hookEventName": payload.hook_event_name,
+                "permissionDecision": "deny",
+                "permissionDecisionReason": f"[CCHOOK 030] {refuse_reason}",
+            }
+        }
+
+    risk = detect_cc_risk(kind, intent_json)
+    details = _format_cc_details(kind, intent_json)
+    timeout = _HOOK_MAX_TIMEOUT
+
+    auto_rule = _try_auto_approve(kind, intent_json, risk)
+
+    from api.main import pool
+
+    if auto_rule:
+        try:
+            async with pool.acquire() as conn:
+                approval_id = await conn.fetchval(
+                    """INSERT INTO authorizations
+                       (kind, operation, details, risk_level, status,
+                        session_id, timeout_seconds, intent_json,
+                        requested_at, decided_at, decision_reason)
+                       VALUES ($1, $2, $3, $4, 'approved', NULL, $5, $6,
+                               NOW(), NOW(), $7)
+                       RETURNING id""",
+                    kind, intent_text, details, risk,
+                    timeout, json.dumps(intent_json),
+                    f"auto-approved: {auto_rule}",
+                )
+        except Exception as e:
+            try:
+                from api.debug import argos_error
+                await argos_error("cc_hook", "CCHOOK-040", str(e)[:200], exc=e)
+            except Exception:
+                pass
+            return {
+                "hookSpecificOutput": {
+                    "hookEventName": payload.hook_event_name,
+                    "permissionDecision": "deny",
+                    "permissionDecisionReason": f"[CCHOOK 040] DB insert failed: {type(e).__name__}",
+                }
+            }
+        return {
+            "hookSpecificOutput": {
+                "hookEventName": payload.hook_event_name,
+                "permissionDecision": "allow",
+                "permissionDecisionReason": f"argos auto-approved id={approval_id} rule={auto_rule}",
+            }
+        }
+
+    try:
+        async with pool.acquire() as conn:
+            approval_id = await conn.fetchval(
+                """INSERT INTO authorizations
+                   (kind, operation, details, risk_level, status,
+                    session_id, timeout_seconds, intent_json, requested_at)
+                   VALUES ($1, $2, $3, $4, 'pending', NULL, $5, $6, NOW())
+                   RETURNING id""",
+                kind,
+                intent_text,
+                details,
+                risk,
+                timeout,
+                json.dumps(intent_json),
+            )
+    except Exception as e:
+        try:
+            from api.debug import argos_error
+            await argos_error("cc_hook", "CCHOOK-010", str(e)[:200], exc=e)
+        except Exception:
+            pass
+        return {
+            "hookSpecificOutput": {
+                "hookEventName": payload.hook_event_name,
+                "permissionDecision": "deny",
+                "permissionDecisionReason": f"[CCHOOK 010] DB insert failed: {type(e).__name__}",
+            }
+        }
+
+    elapsed = 0.0
+    while elapsed < timeout:
+        await asyncio.sleep(_HOOK_POLL_INTERVAL)
+        elapsed += _HOOK_POLL_INTERVAL
+
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT status, decision_reason FROM authorizations WHERE id = $1",
+                approval_id,
+            )
+
+        if not row:
+            return {
+                "hookSpecificOutput": {
+                    "hookEventName": payload.hook_event_name,
+                    "permissionDecision": "deny",
+                    "permissionDecisionReason": f"[CCHOOK 020] authorization {approval_id} vanished",
+                }
+            }
+
+        status = row["status"]
+        if status == "approved":
+            return {
+                "hookSpecificOutput": {
+                    "hookEventName": payload.hook_event_name,
+                    "permissionDecision": "allow",
+                    "permissionDecisionReason": f"argos approved id={approval_id}",
+                }
+            }
+        if status == "denied":
+            return {
+                "hookSpecificOutput": {
+                    "hookEventName": payload.hook_event_name,
+                    "permissionDecision": "deny",
+                    "permissionDecisionReason": row["decision_reason"] or f"argos denied id={approval_id}",
+                }
+            }
+        if status == "timeout":
+            return {
+                "hookSpecificOutput": {
+                    "hookEventName": payload.hook_event_name,
+                    "permissionDecision": "deny",
+                    "permissionDecisionReason": f"argos timeout id={approval_id}",
+                }
+            }
+
+    async with pool.acquire() as conn:
+        await conn.execute(
+            "UPDATE authorizations SET status = 'timeout' WHERE id = $1 AND status = 'pending'",
+            approval_id,
+        )
+    return {
+        "hookSpecificOutput": {
+            "hookEventName": payload.hook_event_name,
+            "permissionDecision": "deny",
+            "permissionDecisionReason": f"argos local timeout id={approval_id}",
+        }
+    }
+
+
+# =============================================================================
+# Faza B Pas 6: Auto-approve rules pentru patterns low-risk
+# Feature flag: ARGOS_AUTO_APPROVE_ENABLED (default "0" = off)
+# Extinsibil prin adaugare in _AUTO_APPROVE_RULES (in viitor, mutare in DB)
+# =============================================================================
+
+_AUTO_APPROVE_ENABLED = os.getenv("ARGOS_AUTO_APPROVE_ENABLED", "0") == "1"
+
+_RISK_ORDER = {"low": 0, "medium": 1, "high": 2, "critical": 3}
+
+# Dangerous shell metachars blacklist pentru bash auto-approve
+# (pipe/redirect/subshell/chain = NU se aproba automat nici safe cmds)
+_BASH_META_BLOCKLIST = ["|", ">", "<", ";", "`", "$(", "&&", "||", "\n", "\r"]
+
+
+def _rule_bash_safe_read_only(ij: dict) -> bool:
+    """Match: bash command with first word in BASH_SAFE_CMDS, no shell metachars."""
+    cmd = (ij.get("command") or "").strip()
+    if not cmd:
+        return False
+    first = _bash_first_word(cmd)
+    if first not in BASH_SAFE_CMDS:
+        return False
+    for meta in _BASH_META_BLOCKLIST:
+        if meta in cmd:
+            return False
+    return True
+
+
+# Rules: (rule_name, kind, max_risk_level, match_fn)
+# Doar rules care intorc True pe low-risk operations safe.
+# Conservativ la inceput — expand dupa feedback real.
+_AUTO_APPROVE_RULES = [
+    ("bash_safe_read_only", "cc_bash", "low", _rule_bash_safe_read_only),
+]
+
+
+def _try_auto_approve(kind: str, intent_json: dict, risk: str):
+    """Check auto-approve rules. Returns rule_name (str) if matched, else None.
+
+    Requires ARGOS_AUTO_APPROVE_ENABLED=1 (feature flag off by default).
+    """
+    if not _AUTO_APPROVE_ENABLED:
+        return None
+    req_risk = _RISK_ORDER.get(risk, 99)
+    for rule_name, rule_kind, max_risk, match_fn in _AUTO_APPROVE_RULES:
+        if rule_kind != kind:
+            continue
+        rule_max = _RISK_ORDER.get(max_risk, 0)
+        if req_risk > rule_max:
+            continue
+        try:
+            if match_fn(intent_json):
+                return rule_name
+        except Exception:
+            continue
+    return None
+
+
+@router.get("/claude-code/approvals")
+async def list_approvals(
+    status: str = "pending",
+    limit: int = 50,
+):
+    from api.main import pool
+    async with pool.acquire() as conn:
+        if status == "pending":
+            await conn.execute(
+                """UPDATE authorizations
+                   SET status = 'timeout'
+                   WHERE status = 'pending'
+                     AND timeout_seconds IS NOT NULL
+                     AND EXTRACT(EPOCH FROM (NOW() - requested_at)) > timeout_seconds"""
+            )
+        rows = await conn.fetch(
+            """SELECT id, kind, operation, details, risk_level, status,
+                      session_id, timeout_seconds, intent_json, decision_reason,
+                      requested_at, decided_at
+               FROM authorizations
+               WHERE status = $1
+               ORDER BY requested_at DESC
+               LIMIT $2""",
+            status,
+            limit,
+        )
+
+    def fmt_ts(ts):
+        if ts is None:
+            return None
+        return ts.strftime("%Y-%m-%dT%H:%M:%S") + "Z"
+
+    approvals = [
+        {
+            "approval_id":      r["id"],
+            "kind":             r["kind"],
+            "intent_text":      r["operation"],
+            "details":          r["details"],
+            "risk_level":       r["risk_level"],
+            "status":           r["status"],
+            "session_id":       r["session_id"],
+            "timeout_seconds":  r["timeout_seconds"],
+            "intent_json":      r["intent_json"],
+            "decision_reason":  r["decision_reason"],
+            "requested_at":     fmt_ts(r["requested_at"]),
+            "decided_at":       fmt_ts(r["decided_at"]),
+        }
+        for r in rows
+    ]
+
+    return {"approvals": approvals, "total": len(approvals)}
