@@ -191,7 +191,20 @@ async def nanite_heartbeat(data: NaniteHeartbeat):
 
 @router.get("/nanite/config/{node_id}")
 async def nanite_config(node_id: str):
-    """Nanite gets bootstrap config from ARGOS (tailscale key, argos URL, etc)"""
+    """Nanite gets bootstrap config from ARGOS (tailscale key, argos URL, etc).
+
+    SECURITY (audit C6):
+    - This endpoint returns the Tailscale auth key, which is a pre-shared
+      secret that lets the holder join the operator's tailnet. The key is
+      stored as PLAINTEXT in the `settings` table (key='tailscale_auth_key',
+      written via POST /api/settings/{key}). It cannot be encrypted at rest
+      without losing the bootstrap-from-zero property of nanite ISOs.
+    - Auth is enforced via the X-API-Key header (router-level _AUTH dependency
+      in api/main.py). Run ARGOS only on a trusted network — anyone who can
+      reach this endpoint AND has the API key can join your tailnet.
+    - Long-term mitigation: rotate `tailscale_auth_key` periodically; prefer
+      one-shot keys (Tailscale supports time/usage-bounded auth keys).
+    """
     from api.main import pool
 
     async with pool.acquire() as conn:
@@ -221,7 +234,13 @@ async def nanite_config(node_id: str):
 
 @router.post("/nanite/nodes/{node_id}/cmd")
 async def send_command_to_nanite(node_id: str, req: NaniteCommandRequest):
-    """ARGOS queues a command for nanite to execute"""
+    """ARGOS queues a command for nanite to execute.
+
+    SECURITY (audit C5): this is effectively a command-and-control channel —
+    whatever shell command lands here is fetched and run by the nanite agent
+    on its next poll of GET /nanite/commands/{node_id}. Auth is enforced by
+    the router-level _AUTH dependency in api/main.py. Do not relax that.
+    """
     from api.main import pool
 
     async with pool.acquire() as conn:
