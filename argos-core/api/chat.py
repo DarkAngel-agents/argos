@@ -1,10 +1,50 @@
 import os
+import re
 import json
+import shlex
+import base64
+import secrets
 import anthropic
 from fastapi import APIRouter, HTTPException, Request
 from api.rate_limit import limiter
 from pydantic import BaseModel
 from typing import Optional
+
+
+# ─── Tool-dispatch input validators (audit N1/N2/N3) ──────────────────────────
+# Used by read_file, code_edit, github_push — see _execute_tool below.
+_PATH_OR_REF_RE = re.compile(r"^[A-Za-z0-9._/-]+$")
+
+# Operator-overridable list of base directories where code_edit is allowed to
+# operate. Colon-separated. Default covers the in-repo tree and NixOS config.
+_ALLOWED_WORKDIR_BASES = tuple(
+    p.strip().rstrip("/") for p in os.getenv(
+        "ARGOS_CODE_EDIT_BASES",
+        "/home/darkangel/.argos:/etc/nixos",
+    ).split(":") if p.strip()
+)
+
+
+def _validate_path_arg(value, max_len: int) -> bool:
+    """Reject anything that isn't a simple POSIX path / git ref. Used by
+    read_file (path) and github_push (repo_path, branch). Audit N1, N3."""
+    return (
+        isinstance(value, str)
+        and 0 < len(value) <= max_len
+        and bool(_PATH_OR_REF_RE.match(value))
+    )
+
+
+def _resolve_workdir(workdir) -> str:
+    """Return abspath if workdir is absolute and lives under an allowed base,
+    else "" (caller treats empty as rejection). Audit N2."""
+    if not isinstance(workdir, str) or not workdir.startswith("/"):
+        return ""
+    abs_path = os.path.abspath(workdir)
+    for base in _ALLOWED_WORKDIR_BASES:
+        if abs_path == base or abs_path.startswith(base + "/"):
+            return abs_path
+    return ""
 
 router = APIRouter()
 
@@ -841,8 +881,22 @@ async def _execute_tool(name: str, inputs: dict, pool=None) -> dict:
     elif name == "code_edit":
         from api.main import pool
         from api.backup import backup_file, auto_rollback_if_broken, WATCHED_FILES
-        prompt = inputs["prompt"]
-        workdir = inputs.get("workdir", "/home/darkangel/.argos/argos-core")
+        prompt = inputs.get("prompt", "")
+        raw_workdir = inputs.get("workdir", "/home/darkangel/.argos/argos-core")
+
+        # Audit N2: resolve + abspath + base-dir whitelist on workdir.
+        workdir = _resolve_workdir(raw_workdir)
+        if not workdir:
+            return {
+                "stdout": "",
+                "stderr": (
+                    "workdir must be absolute and live under one of "
+                    f"{list(_ALLOWED_WORKDIR_BASES)}"
+                ),
+                "returncode": 1,
+            }
+        if not isinstance(prompt, str) or not prompt:
+            return {"stdout": "", "stderr": "prompt required", "returncode": 1}
 
         # Detectam ce fisiere ar putea fi modificate si facem backup
         modified_modules = []
@@ -851,9 +905,32 @@ async def _execute_tool(name: str, inputs: dict, pool=None) -> dict:
                 await backup_file(pool, module_name, created_by="argos_code_edit")
                 modified_modules.append(module_name)
 
-        # Ruleaza claude CLI
-        cmd = f'cd {workdir} && timeout 120 claude --dangerously-skip-permissions -p {repr(prompt)} 2>&1'
-        result = await _exec_ssh_by_name("beasty", cmd)
+        # Audit N2: pass prompt via remote temp file to keep it off the command
+        # line entirely. base64 encoding makes the write step shell-safe; the
+        # claude invocation reads the file via "$(cat ...)" substitution which
+        # delivers the file content as a single literal argument.
+        prompt_b64 = base64.b64encode(prompt.encode()).decode()
+        tmp = f"/tmp/argos-prompt-{secrets.token_hex(16)}.txt"
+        tmp_q = shlex.quote(tmp)
+        write = await _exec_ssh_by_name(
+            "beasty",
+            f"echo {prompt_b64} | base64 -d > {tmp_q} && chmod 600 {tmp_q}",
+        )
+        if write["returncode"] != 0:
+            return {
+                "stdout": "",
+                "stderr": f"failed to stage prompt: {write.get('stderr', '')}",
+                "returncode": 1,
+            }
+        try:
+            cmd = (
+                f"cd {shlex.quote(workdir)} && "
+                f"timeout 120 claude --dangerously-skip-permissions "
+                f"-p \"$(cat {tmp_q})\" 2>&1"
+            )
+            result = await _exec_ssh_by_name("beasty", cmd)
+        finally:
+            await _exec_ssh_by_name("beasty", f"rm -f {tmp_q}")
 
         if result["returncode"] == 0:
             if "argos-core" in workdir:
@@ -887,37 +964,88 @@ async def _execute_tool(name: str, inputs: dict, pool=None) -> dict:
         return result
 
     elif name == "read_file":
-        return await _exec_ssh_by_name(inputs["machine"], f"cat {inputs['path']}")
+        # Audit N1: path is regex-validated; never embedded in shell on the
+        # local fast path; shlex-quoted on the remote SSH path.
+        path = inputs.get("path", "")
+        machine = (inputs.get("machine") or "").strip().lower()
+        if not _validate_path_arg(path, max_len=4096):
+            return {
+                "stdout": "",
+                "stderr": "invalid path: must match [A-Za-z0-9._/-]+ (no spaces, no shell metachars)",
+                "returncode": 1,
+            }
+        # Local read — use Python open() directly, no shell at all.
+        if machine in {"beasty", "127.0.0.1", "localhost", ""}:
+            try:
+                with open(path, "r", encoding="utf-8", errors="replace") as f:
+                    content = f.read(1_000_000)  # cap at 1 MB
+                return {"stdout": content, "stderr": "", "returncode": 0}
+            except FileNotFoundError:
+                return {"stdout": "", "stderr": f"file not found: {path}", "returncode": 1}
+            except PermissionError:
+                return {"stdout": "", "stderr": f"permission denied: {path}", "returncode": 1}
+            except Exception as e:
+                return {"stdout": "", "stderr": f"read failed: {type(e).__name__}: {e}", "returncode": 1}
+        # Remote — path was already validated; shlex.quote is defense in depth.
+        return await _exec_ssh_by_name(machine, f"cat {shlex.quote(path)}")
 
     elif name == "github_push":
-        machine = inputs["machine"]
-        repo_path = inputs["repo_path"]
-        commit_message = inputs["commit_message"]
+        machine = inputs.get("machine", "")
+        repo_path = inputs.get("repo_path", "")
+        commit_message = inputs.get("commit_message", "")
         branch = inputs.get("branch", "main")
 
-        # Comenzi git pentru add, commit si push
+        # Audit N3: regex-validate path/ref args (max 200 chars).
+        if not _validate_path_arg(repo_path, max_len=200):
+            return {"returncode": 1, "stdout": "",
+                    "stderr": "invalid repo_path: must match [A-Za-z0-9._/-]+, max 200 chars"}
+        if not _validate_path_arg(branch, max_len=200):
+            return {"returncode": 1, "stdout": "",
+                    "stderr": "invalid branch: must match [A-Za-z0-9._/-]+, max 200 chars"}
+        if not isinstance(commit_message, str) or not commit_message:
+            return {"returncode": 1, "stdout": "", "stderr": "commit_message required"}
+
+        # Audit N3: deliver commit message via -F <file> so its content is
+        # never on the command line. base64-encode for the write step so the
+        # echo command itself is safe regardless of message content.
+        msg_b64 = base64.b64encode(commit_message.encode()).decode()
+        tmp = f"/tmp/argos-cm-{secrets.token_hex(16)}.txt"
+        tmp_q = shlex.quote(tmp)
+
+        write = await _exec_ssh_by_name(
+            machine,
+            f"echo {msg_b64} | base64 -d > {tmp_q}",
+        )
+        if write["returncode"] != 0:
+            return {"returncode": 1, "stdout": "",
+                    "stderr": f"failed to write commit message: {write.get('stderr', '')}"}
+
+        rp = shlex.quote(repo_path)
+        br = shlex.quote(branch)
         commands = [
-            f"cd {repo_path} && git add -A",
-            f"cd {repo_path} && git commit -m '{commit_message}'",
-            f"cd {repo_path} && git push origin {branch}"
+            f"cd {rp} && git add -A",
+            f"cd {rp} && git commit -F {tmp_q}",
+            f"cd {rp} && git push origin {br}",
         ]
 
         results = []
-        for cmd in commands:
-            result = await _exec_ssh_by_name(machine, cmd)
-            results.append(result)
-            # Daca o comanda esueaza, oprim
-            if result["returncode"] != 0:
-                return {
-                    "returncode": result["returncode"],
-                    "stdout": "\n".join(r.get("stdout", "") for r in results),
-                    "stderr": result.get("stderr", "")
-                }
+        try:
+            for cmd in commands:
+                result = await _exec_ssh_by_name(machine, cmd)
+                results.append(result)
+                if result["returncode"] != 0:
+                    return {
+                        "returncode": result["returncode"],
+                        "stdout": "\n".join(r.get("stdout", "") for r in results),
+                        "stderr": result.get("stderr", ""),
+                    }
+        finally:
+            await _exec_ssh_by_name(machine, f"rm -f {tmp_q}")
 
         return {
             "returncode": 0,
             "stdout": f"✓ Push pe GitHub reușit: {branch} @ {repo_path}\n" + "\n".join(r.get("stdout", "") for r in results),
-            "stderr": ""
+            "stderr": "",
         }
 
     elif name == "create_job":
