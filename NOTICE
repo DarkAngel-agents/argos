@@ -1,0 +1,112 @@
+ARGOS — Autonomous Resilient Guardian Orchestration System
+Copyright 2024-2026 Mihai (Digiways)
+
+This product is licensed under the Apache License, Version 2.0 (the "License");
+you may not use this product except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+================================================================================
+THIRD-PARTY COMPONENTS
+================================================================================
+
+This product bundles or depends on the following third-party components.
+Each component is distributed under the terms of its own license; the inclusion
+of these components in ARGOS does not extend the Apache 2.0 license to them.
+
+--------------------------------------------------------------------------------
+htmx
+--------------------------------------------------------------------------------
+Bundled file: argos-core/ui/static/htmx.min.js
+              argos-core/ui/static/htmx-sse.min.js
+Source:       https://htmx.org / https://github.com/bigskysoftware/htmx
+License:      Zero-Clause BSD (0BSD) / BSD-2-Clause
+Copyright (c) Big Sky Software
+
+Permission to use, copy, modify, and/or distribute this software for any
+purpose with or without fee is hereby granted.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH
+REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY
+AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT,
+INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM
+LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR
+OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+PERFORMANCE OF THIS SOFTWARE.
+
+--------------------------------------------------------------------------------
+Alpine.js
+--------------------------------------------------------------------------------
+Bundled file: argos-core/ui/static/alpine.min.js
+Source:       https://alpinejs.dev / https://github.com/alpinejs/alpine
+License:      MIT
+Copyright (c) 2019-present Caleb Porzio and contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+--------------------------------------------------------------------------------
+Geist & Geist Mono fonts
+--------------------------------------------------------------------------------
+Bundled file: argos-core/ui/v2/static/fonts/Geist.woff2
+              argos-core/ui/v2/static/fonts/GeistMono.woff2
+Source:       https://vercel.com/font / https://github.com/vercel/geist-font
+License:      SIL Open Font License 1.1 (OFL-1.1)
+Copyright (c) 2023 Vercel, in collaboration with basement.studio
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+This license is copied below, and is also available with a FAQ at:
+http://scripts.sil.org/OFL
+
+The OFL-1.1 permits the fonts to be used, studied, modified, and redistributed
+freely as long as they are not sold by themselves. The fonts, including any
+derivative works, can be bundled, embedded, redistributed and/or sold with any
+software provided that any reserved names are not used by derivative works.
+The fonts and derivatives, however, cannot be released under any other type of
+license. The requirement for fonts to remain under this license does not apply
+to any document created using the fonts or their derivatives.
+
+--------------------------------------------------------------------------------
+Python dependencies
+--------------------------------------------------------------------------------
+The Python dependencies declared in argos-core/requirements.txt and
+argos-core/mcp_servers/argos_db_mcp/requirements.txt are installed at runtime
+via pip and are not redistributed in source form by this project. Their licenses
+remain with their respective upstream maintainers. A summary of license terms
+for each direct dependency is documented in the project's audit reports.
+
+Notable: asyncssh is dual-licensed under the Eclipse Public License 2.0 OR
+GNU GPL 2.0+. Operators distributing ARGOS in a single artifact (e.g. a Docker
+image with asyncssh pre-installed) should review whether the GPL clause
+applies to their distribution model.
+
+--------------------------------------------------------------------------------
+Rust dependencies (argos-core/hooks/argos-approval-hook)
+--------------------------------------------------------------------------------
+The Rust crates declared in argos-core/hooks/argos-approval-hook/Cargo.toml
+are downloaded from crates.io at build time and are not redistributed in
+source form by this project. The transitive dependency tree is dual-licensed
+under MIT OR Apache-2.0 (with a small number of crates licensed under ISC or
+MPL-2.0 — see argos-core/hooks/argos-approval-hook/Cargo.lock for details).
