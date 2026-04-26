@@ -596,18 +596,22 @@ async def test_iso(pool, build_id: str, proxmox_server_id: int, proxmox: dict) -
 @router.post("/iso/build")
 @limiter.limit("5/minute")  # audit H4 — nix-build is heavy, disk DoS vector
 async def api_build_iso(request: Request, req: BuildISORequest):
-    # Audit H13 — cap concurrent builds. Refuse rather than queue so the
-    # caller learns immediately and can retry instead of hanging on a slow
-    # nix-build. Soft cap: a brief race may allow a 4th build to slip in,
-    # but the steady-state limit holds at 3.
-    if _BUILD_SEMAPHORE.locked():
+    # Audit H13 + N15 — cap concurrent builds with an atomic try-acquire so
+    # we never silently queue. Two simultaneous probes used to both pass the
+    # locked()-check and one would block; now wait_for(timeout=0) refuses
+    # immediately when the semaphore is full.
+    try:
+        await asyncio.wait_for(_BUILD_SEMAPHORE.acquire(), timeout=0)
+    except asyncio.TimeoutError:
         raise HTTPException(
             status_code=429,
             detail="too many concurrent builds, try again later",
         )
-    async with _BUILD_SEMAPHORE:
+    try:
         from api.main import pool
         return await build_iso(pool, req)
+    finally:
+        _BUILD_SEMAPHORE.release()
 
 
 @router.get("/iso/types")
