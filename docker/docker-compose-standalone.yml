@@ -5,7 +5,10 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: claude
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme}
+      # No fallback — if DB_PASSWORD is unset, compose will refuse to start the
+      # stack with an explicit error. Audit H6 (was default "changeme" — unsafe
+      # because the DB binds to host port 5433). Set DB_PASSWORD in .argos.env.
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in .argos.env (use openssl rand -hex 24)}
       POSTGRES_DB: claudedb
     volumes:
       - argos-pgdata:/var/lib/postgresql/data

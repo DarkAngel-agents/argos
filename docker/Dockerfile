@@ -16,4 +16,5 @@ RUN useradd -m -u 1000 argos
 USER argos
 WORKDIR /home/darkangel/.argos/argos-core
 
-CMD ["python3", "-m", "uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# --limit-max-request-size 10485760 → reject request bodies > 10 MB (audit H3)
+CMD ["python3", "-m", "uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000", "--limit-max-request-size", "10485760"]

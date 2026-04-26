@@ -367,8 +367,10 @@ async def build_iso(pool, req: BuildISORequest) -> dict:
     )
 
     if copy_proxmox["returncode"] == 0:
+        # accept-new = TOFU: write to known_hosts on first contact, then refuse
+        # if the key changes. Audit H5 (was StrictHostKeyChecking=no).
         scp_result = await _local(
-            f"scp -o StrictHostKeyChecking=no -i {SSH_KEY} {iso_dest} "
+            f"scp -o StrictHostKeyChecking=accept-new -i {SSH_KEY} {iso_dest} "
             f"{proxmox['ssh_user']}@{proxmox['ip']}:{proxmox_iso_path}"
         )
         if scp_result["returncode"] != 0:

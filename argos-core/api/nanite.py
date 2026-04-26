@@ -212,7 +212,7 @@ async def nanite_config(node_id: str):
         "node_id": node_id,
         "tailscale_auth_key": ts_key,
         "tailscale_tailnet": ts_net,
-        "argos_url": os.getenv("ARGOS_URL", "http://11.11.11.111:666"),
+        "argos_url": os.getenv("ARGOS_URL", "http://localhost:666"),
         "heartbeat_interval": 30,
         "nanite_listen_port": 8666,
     }
