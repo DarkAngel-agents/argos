@@ -28,3 +28,6 @@ claude-memory.db
 ARGOS_CONTINUE_PROMPT.txt
 Text File*
 argos-mobile/
+.vikunja-token
+.vault-cc-api
+*.token

@@ -368,6 +368,40 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
 
 
+class BodySizeLimitMiddleware:
+    def __init__(self, app, max_size: int = 10 * 1024 * 1024):
+        self.app = app
+        self.max_size = max_size
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http" or scope["method"] not in ("POST", "PUT", "PATCH"):
+            return await self.app(scope, receive, send)
+        total = 0
+        limit = self.max_size
+
+        async def receive_limited():
+            nonlocal total
+            msg = await receive()
+            if msg["type"] == "http.request":
+                total += len(msg.get("body", b""))
+                if total > limit:
+                    await send({"type": "http.response.start", "status": 413,
+                                "headers": [(b"content-type", b"text/plain")]})
+                    await send({"type": "http.response.body",
+                                "body": f"[BODY 001] body exceeds {limit} bytes".encode()})
+                    raise Exception("body limit exceeded")
+            return msg
+
+        try:
+            await self.app(scope, receive_limited, send)
+        except Exception as e:
+            if "body limit exceeded" not in str(e):
+                raise
+
+
+app.add_middleware(BodySizeLimitMiddleware, max_size=10 * 1024 * 1024)
+
+
 @app.middleware("http")
 async def catch_db_errors(request, call_next):
     try:

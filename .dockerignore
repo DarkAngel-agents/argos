@@ -1,0 +1,15 @@
+.git
+.gitignore
+.vault-cc-api
+.vikunja-token
+*.token
+*.secret
+.env
+.env.*
+!.env.example
+argos-core/ui/favicon.ico
+argos-core/hooks/argos-approval-hook/target
+argos-core/hooks/argos-approval-hook/Cargo.lock
+docker/swarm-stack.yml*
+*.bak
+*.bak-*
