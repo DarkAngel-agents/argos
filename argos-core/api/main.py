@@ -309,8 +309,10 @@ async def get_pool():
     except Exception:
         print("[ARGOS] Pool mort - recreez conexiunea DB...", flush=True)
         try:
+            # Audit N7: read DB_HOST/DB_PORT from env (was hardcoded 172.17.0.1).
             pool = await asyncpg.create_pool(
-                host="172.17.0.1", port=5433,
+                host=os.getenv("DB_HOST", "127.0.0.1"),
+                port=int(os.getenv("DB_PORT", "5432")),
                 user=os.getenv("DB_USER"),
                 password=os.getenv("DB_PASSWORD"),
                 database=os.getenv("DB_NAME"),
