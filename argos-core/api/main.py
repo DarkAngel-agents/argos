@@ -1,5 +1,6 @@
 import os
 import re
+import hmac
 import asyncpg
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends, Header, HTTPException, Request
@@ -49,7 +50,8 @@ async def require_api_key(
         return
     if ARGOS_API_KEY is None:
         return  # dev mode — already warned at startup
-    if x_api_key != ARGOS_API_KEY:
+    # Audit N11: constant-time compare to neutralise timing-channel leakage.
+    if not hmac.compare_digest(x_api_key or "", ARGOS_API_KEY):
         raise HTTPException(status_code=401, detail="Invalid or missing X-API-Key header")
 
 
