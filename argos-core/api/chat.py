@@ -43,6 +43,17 @@ _ALLOWED_GIT_BASES = tuple(
     ).split(":") if p.strip()
 )
 
+# Deny-list applied AFTER the read whitelist (audit #237). Refuse user-secret
+# paths even when they fall inside an allowed base. Each entry is matched as a
+# path segment, so /.ssh blocks the directory and everything under it but does
+# NOT block /etc/ssh or /home/foo/.sshrc. Colon-separated, env-overridable.
+_DENY_READ_SUFFIXES = tuple(
+    p.strip().rstrip("/") for p in os.getenv(
+        "ARGOS_READ_DENY",
+        "/.ssh:/.gnupg:/.bash_history",
+    ).split(":") if p.strip()
+)
+
 
 def _validate_path_arg(value, max_len: int) -> bool:
     """Reject anything that isn't a simple POSIX path / git ref. Used by
@@ -68,15 +79,24 @@ def _resolve_workdir(workdir) -> str:
 
 def _resolve_read_path(path) -> str:
     """Return realpath if `path` is absolute and (after symlink resolution)
-    sits under one of _ALLOWED_READ_BASES. Empty string on rejection.
-    Audit #236 — closes the path-traversal gap in read_file LOCAL."""
+    sits under one of _ALLOWED_READ_BASES, AND not in the deny-list. Empty
+    string on rejection. Audit #236 (whitelist) + #237 (deny-list)."""
     if not isinstance(path, str) or not path.startswith("/"):
         return ""
     real = os.path.realpath(path)
+    in_base = False
     for base in _ALLOWED_READ_BASES:
         if real == base or real.startswith(base + "/"):
-            return real
-    return ""
+            in_base = True
+            break
+    if not in_base:
+        return ""
+    # Audit #237 — deny user secrets even inside an allowed base.
+    real_check = real + "/"
+    for suffix in _DENY_READ_SUFFIXES:
+        if (suffix + "/") in real_check:
+            return ""
+    return real
 
 
 def _resolve_git_path(path) -> str:
