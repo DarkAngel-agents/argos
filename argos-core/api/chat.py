@@ -579,7 +579,7 @@ async def send_message(request: Request, req: MessageRequest):
                         "INSERT INTO messages (conversation_id, role, content, pending, created_at) VALUES ($1, 'assistant', $2, FALSE, NOW())",
                         req.conversation_id, result_info
                     )
-            except: pass
+            except Exception: pass  # audit N20 — was bare except
             tool_results.append({
                 'type': 'tool_result',
                 'tool_use_id': tool_use.id,

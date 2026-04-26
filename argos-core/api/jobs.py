@@ -240,7 +240,7 @@ async def execute_job(job_id: int):
     except Exception as e:
         from api.debug import argos_error as _ae; import asyncio as _aio
         try: _aio.get_event_loop().run_until_complete(_ae("jobs", "ERR001", str(e)[:200], exc=e))
-        except: pass
+        except Exception: pass  # audit N20 — was bare except
         async with pool.acquire() as conn:
             await conn.execute(
                 "UPDATE jobs SET status = 'failed', error = $1, updated_at = NOW() WHERE id = $2",

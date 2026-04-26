@@ -104,7 +104,7 @@ async def _ssh(host: str, user: str, command: str, timeout: int = 30) -> dict:
     except Exception as e:
         from api.debug import argos_error as _ae; import asyncio as _aio
         try: _aio.get_event_loop().run_until_complete(_ae("iso_builder", "ERR001", str(e)[:200], exc=e))
-        except: pass
+        except Exception: pass  # audit N20 — was bare except, kept silent on log-of-log failures
         return {"stdout": "", "stderr": str(e), "returncode": 1}
 
 async def _local(command: str, timeout: int = 600) -> dict:

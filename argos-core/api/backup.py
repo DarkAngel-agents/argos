@@ -57,7 +57,7 @@ async def _read_file_local(path: str) -> bytes:
     except Exception as e:
         from api.debug import argos_error as _ae; import asyncio as _aio
         try: _aio.get_event_loop().run_until_complete(_ae("backup", "ERR001", str(e)[:200], exc=e))
-        except: pass
+        except Exception: pass  # audit N20 — was bare except
         raise Exception(f"Nu pot citi {path}: {e}")
 
 
@@ -130,7 +130,7 @@ async def backup_file(pool, module_name: str, created_by: str = "argos"):
     except Exception as e:
         from api.debug import argos_error as _ae; import asyncio as _aio
         try: _aio.get_event_loop().run_until_complete(_ae("backup", "ERR001", str(e)[:200], exc=e))
-        except: pass
+        except Exception: pass  # audit N20 — was bare except
         print(f"[BACKUP] Eroare backup {module_name}: {e}")
         return False
 
@@ -171,7 +171,7 @@ async def rollback_file(pool, module_name: str, version_type: str = "previous") 
     except Exception as e:
         from api.debug import argos_error as _ae; import asyncio as _aio
         try: _aio.get_event_loop().run_until_complete(_ae("backup", "ERR001", str(e)[:200], exc=e))
-        except: pass
+        except Exception: pass  # audit N20 — was bare except
         return {"status": "failed", "error": str(e)}
 
 
@@ -198,7 +198,7 @@ async def auto_rollback_if_broken(pool, module_name: str) -> dict:
     except Exception as e:
         from api.debug import argos_error as _ae; import asyncio as _aio
         try: _aio.get_event_loop().run_until_complete(_ae("backup", "ERR001", str(e)[:200], exc=e))
-        except: pass
+        except Exception: pass  # audit N20 — was bare except
         return {"status": "error", "error": str(e)}
 
 
