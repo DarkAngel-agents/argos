@@ -18,8 +18,23 @@ KNOWN_HOSTS = {
     "zeus":     {"host": "11.11.11.11",  "user": "root"},
 }
 
-# VM-uri anuntate via ISO - user argos, cheie SSH
-AGENT_VMS = {}  # ip -> {"host": ip, "user": "argos"}
+# VM-uri anuntate via ISO - user argos, cheie SSH.
+# Audit N19: bounded LRU-by-write so a flood of announce calls can't bloat RAM.
+from collections import OrderedDict as _OD
+
+
+class _BoundedDict(_OD):
+    def __init__(self, max_size: int = 500):
+        super().__init__()
+        self._max = max_size
+    def __setitem__(self, key, value):
+        super().__setitem__(key, value)
+        self.move_to_end(key)
+        while len(self) > self._max:
+            self.popitem(last=False)
+
+
+AGENT_VMS = _BoundedDict(max_size=500)  # ip -> {"host": ip, "user": "argos"}
 
 LOCAL_MACHINES = []
 

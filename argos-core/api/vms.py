@@ -1,4 +1,5 @@
 import asyncio
+from collections import OrderedDict
 from fastapi import APIRouter
 from pydantic import BaseModel
 from typing import Optional
@@ -6,7 +7,21 @@ from datetime import datetime
 
 router = APIRouter()
 
-announced_vms = {}
+
+# Audit N19: cap unbounded growth on /vm-announce. FIFO eviction by write
+# order — every announce refreshes its slot, oldest-written falls out first.
+class _BoundedDict(OrderedDict):
+    def __init__(self, max_size: int = 500):
+        super().__init__()
+        self._max = max_size
+    def __setitem__(self, key, value):
+        super().__setitem__(key, value)
+        self.move_to_end(key)
+        while len(self) > self._max:
+            self.popitem(last=False)
+
+
+announced_vms = _BoundedDict(max_size=500)
 
 
 class VMAnnounce(BaseModel):
