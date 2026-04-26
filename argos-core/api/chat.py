@@ -1309,7 +1309,24 @@ def _truncate_result_info(text: str, max_lines: int = 3, max_chars: int = 200) -
 # ── Skills loader ─────────────────────────────────────────────────────────────
 
 SKILLS_DIR = os.path.expanduser("~/.argos/argos-core/skills/")
-_loaded_skills = {}  # conversation_id -> set of skill names
+
+
+# Audit N18: cap unbounded growth. _loaded_skills accumulates one entry per
+# unique conversation_id (plus an extra "<id>_tree" key). On a long-running
+# server with thousands of conversations this leaks memory. _BoundedDict
+# evicts the least-recently-written key once size exceeds max_size.
+class _BoundedDict(__import__("collections").OrderedDict):
+    def __init__(self, max_size: int = 500):
+        super().__init__()
+        self._max = max_size
+    def __setitem__(self, key, value):
+        super().__setitem__(key, value)
+        self.move_to_end(key)
+        while len(self) > self._max:
+            self.popitem(last=False)
+
+
+_loaded_skills = _BoundedDict(max_size=500)  # conversation_id -> set of skill names
 
 async def _detect_and_load_skills(pool, conversation_id: int, text: str) -> str:
     """Detecteaza ce skills sunt necesare din text si le incarca."""
