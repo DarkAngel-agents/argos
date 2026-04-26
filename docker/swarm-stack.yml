@@ -4,9 +4,9 @@ services:
     deploy:
       replicas: 2
       restart_policy:
-        condition: on-failure
-        delay: 2s
-        max_attempts: 3
+        condition: any
+        delay: 30s
+        window: 300s
       update_config:
         order: start-first
         failure_action: rollback
@@ -23,8 +23,10 @@ services:
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:8000/health || exit 1"]
       interval: 10s
-      timeout: 5s
-      retries: 3
+      timeout: 15s
+      retries: 5
+      start_period: 90s
+
 
   argos-redis:
     image: redis:7-alpine
