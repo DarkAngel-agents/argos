@@ -60,7 +60,6 @@ _AUTH = [Depends(require_api_key)]
 
 pool = None
 system_prompt = None  # core prompt - mereu prezent
-_module_cache = {}    # cache module din DB
 _axiom_cache = {}     # cache reasoning axioms per domain
 
 AXIOM_KEYWORDS = {
