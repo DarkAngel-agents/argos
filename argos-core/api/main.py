@@ -13,11 +13,19 @@ load_dotenv(os.path.expanduser("~/.argos/argos-core/config/.env"))
 ARGOS_API_KEY = os.getenv("ARGOS_API_KEY")
 
 # Paths that bypass auth even when ARGOS_API_KEY is set:
-# - /, /health, /favicon.ico  → public landing + healthcheck (Docker uses /health)
-# - /api/cc/hook              → Claude Code hook; gates itself via approval flow
+# - /, /health, /favicon.ico    → public landing + healthcheck (Docker uses /health)
+# - /api/cc/hook                → Claude Code hook; gates itself via approval flow
+# - /api/stream/activity        → SSE feed; browser EventSource cannot send custom
+#                                 headers, so we trade auth here for a working UI
 # /ui/* is mounted as a sub-app (not a route), so deps don't run there anyway —
 # we still keep the prefix listed for clarity in case the mount ever changes.
-_AUTH_EXEMPT_EXACT = frozenset({"/", "/health", "/favicon.ico", "/api/cc/hook"})
+_AUTH_EXEMPT_EXACT = frozenset({
+    "/",
+    "/health",
+    "/favicon.ico",
+    "/api/cc/hook",
+    "/api/stream/activity",
+})
 _AUTH_EXEMPT_PREFIXES = ("/ui/",)
 
 if not ARGOS_API_KEY:

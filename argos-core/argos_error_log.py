@@ -1,50 +1,90 @@
 #!/usr/bin/env python3
 """
 ARGOS Error Pattern Logger v2
-Zero dependente externe — foloseste psql via subprocess.
+
+Foloseste asyncpg cu queries parametrizate ($1, $2 ...) — niciun string-format
+in SQL. Fix audit H1 (SQL injection prin escape() artizanal).
+
 Normalizeaza erori, calculeaza hash, logheaza in error_patterns.
 Cod de eroare activ doar la count >= 10.
 """
 
+import os
 import re
-import hashlib
-import json
-import subprocess
 import sys
+import json
+import asyncio
+import hashlib
 from datetime import datetime
 
+import asyncpg
+
 # ─── CONFIG ──────────────────────────────────────────────────────────────────
-DB_HOST = "11.11.11.111"
-DB_PORT = "5433"
-DB_USER = "claude"
+DB_HOST = os.getenv("DB_HOST", "11.11.11.111")
+DB_PORT = int(os.getenv("DB_PORT", "5433"))
+DB_USER = os.getenv("DB_USER", "claude")
 DB_PASS = os.getenv("DB_PASSWORD")
-DB_NAME = "claudedb"
+DB_NAME = os.getenv("DB_NAME", "claudedb")
 
 CATEGORY_PREFIXES = [
     "docker", "db", "ssh", "nixos", "swarm", "python", "bash", "generic"
 ]
 
-# ─── PSQL HELPER ─────────────────────────────────────────────────────────────
-def psql(sql: str) -> tuple:
-    import os
-    env = {**os.environ, "PGPASSWORD": DB_PASS}
-    cmd = [
-        "docker", "exec", "argos-db",
-        "psql",
-        f"--host=127.0.0.1",
-        f"--username={DB_USER}", f"--dbname={DB_NAME}",
-        "--tuples-only", "--no-align",
-        "-c", sql
-    ]
+
+# ─── DB HELPERS ──────────────────────────────────────────────────────────────
+async def _connect():
+    conn = await asyncpg.connect(
+        host=DB_HOST, port=DB_PORT,
+        user=DB_USER, password=DB_PASS, database=DB_NAME,
+        timeout=10,
+    )
+    # Auto-encode/decode JSONB so we can pass dicts/lists directly as params
+    # and read them back as Python objects instead of raw strings.
+    await conn.set_type_codec(
+        "jsonb",
+        encoder=json.dumps,
+        decoder=json.loads,
+        schema="pg_catalog",
+    )
+    return conn
+
+
+async def _async_query(sql: str, *params) -> tuple:
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, env=env, timeout=10)
-        if result.returncode != 0:
-            return False, result.stderr.strip()
-        return True, result.stdout.strip()
-    except FileNotFoundError:
-        return False, "psql not found in PATH"
-    except subprocess.TimeoutExpired:
-        return False, "psql timeout after 10s"
+        conn = await _connect()
+    except Exception as e:
+        return False, f"connect failed: {e}"
+    try:
+        rows = await conn.fetch(sql, *params)
+        return True, rows
+    except Exception as e:
+        return False, str(e)
+    finally:
+        await conn.close()
+
+
+async def _async_exec(sql: str, *params) -> tuple:
+    try:
+        conn = await _connect()
+    except Exception as e:
+        return False, f"connect failed: {e}"
+    try:
+        result = await conn.execute(sql, *params)
+        return True, result
+    except Exception as e:
+        return False, str(e)
+    finally:
+        await conn.close()
+
+
+def db_query(sql: str, *params) -> tuple:
+    """Sync wrapper for SELECT. Returns (ok, rows | error_string)."""
+    return asyncio.run(_async_query(sql, *params))
+
+
+def db_exec(sql: str, *params) -> tuple:
+    """Sync wrapper for INSERT/UPDATE/DELETE. Returns (ok, status | error)."""
+    return asyncio.run(_async_exec(sql, *params))
 
 
 # ─── NORMALIZE ───────────────────────────────────────────────────────────────
@@ -64,10 +104,6 @@ def make_hash(pattern: str) -> str:
     return hashlib.sha256(pattern.encode()).hexdigest()[:8]
 
 
-def escape(s: str) -> str:
-    return s.replace("'", "''")
-
-
 # ─── LOG ERROR ───────────────────────────────────────────────────────────────
 def log_error(message, category, node_hostname, node_os, context: dict) -> dict:
     prefix = category.split("-")[0].lower()
@@ -78,43 +114,44 @@ def log_error(message, category, node_hostname, node_os, context: dict) -> dict:
     err_hash = make_hash(pattern)
     context["timestamp"] = datetime.utcnow().isoformat()
 
-    ok, out = psql(f"SELECT count, contexts FROM error_patterns WHERE hash='{err_hash}';")
+    ok, rows = db_query(
+        "SELECT count, contexts FROM error_patterns WHERE hash = $1",
+        err_hash,
+    )
     if not ok:
-        return {"error": out}
+        return {"error": rows}
 
-    if out:
-        parts = out.split("|")
-        new_count = int(parts[0].strip()) + 1
-        try:
-            existing = json.loads(parts[1].strip()) if len(parts) > 1 else []
-        except Exception:
-            existing = []
+    if rows:
+        row = rows[0]
+        new_count = row["count"] + 1
+        existing = row["contexts"] if isinstance(row["contexts"], list) else []
         existing.append(context)
         existing = existing[-20:]
-        ctx_json = escape(json.dumps(existing))
 
-        ok, out = psql(f"""
+        ok, out = db_exec(
+            """
             UPDATE error_patterns
-            SET count={new_count}, last_seen=NOW(),
-                contexts='{ctx_json}'::jsonb,
-                node_hostname='{escape(node_hostname)}',
-                node_os='{escape(node_os)}'
-            WHERE hash='{err_hash}';
-        """)
+            SET count = $1,
+                last_seen = NOW(),
+                contexts = $2,
+                node_hostname = $3,
+                node_os = $4
+            WHERE hash = $5
+            """,
+            new_count, existing, node_hostname, node_os, err_hash,
+        )
         if not ok:
             return {"error": out}
     else:
         new_count = 1
-        ctx_json = escape(json.dumps([context]))
-        ok, out = psql(f"""
+        ok, out = db_exec(
+            """
             INSERT INTO error_patterns
                 (hash, pattern, category, count, node_hostname, node_os, contexts)
-            VALUES (
-                '{err_hash}', '{escape(pattern)}', '{escape(category)}',
-                1, '{escape(node_hostname)}', '{escape(node_os)}',
-                '{ctx_json}'::jsonb
-            );
-        """)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            """,
+            err_hash, pattern, category, 1, node_hostname, node_os, [context],
+        )
         if not ok:
             return {"error": out}
 
@@ -123,52 +160,79 @@ def log_error(message, category, node_hostname, node_os, context: dict) -> dict:
         "count": new_count,
         "code_active": new_count >= 10,
         "pattern": pattern,
-        "category": category
+        "category": category,
     }
 
 
 # ─── GET ERROR ───────────────────────────────────────────────────────────────
 def get_error(err_hash: str) -> dict:
-    ok, out = psql(f"""
+    ok, rows = db_query(
+        """
         SELECT hash, pattern, category, count, node_hostname,
                node_os, last_seen, client_owned, resolved
-        FROM error_patterns WHERE hash='{err_hash}';
-    """)
+        FROM error_patterns WHERE hash = $1
+        """,
+        err_hash,
+    )
     if not ok:
-        return {"error": out}
-    if out:
-        f = [x.strip() for x in out.split("|")]
+        return {"error": rows}
+    if rows:
+        r = rows[0]
         return {
-            "source": "active", "hash": f[0], "pattern": f[1],
-            "category": f[2], "count": f[3], "node_hostname": f[4],
-            "node_os": f[5], "last_seen": f[6], "client_owned": f[7],
-            "resolved": f[8]
+            "source": "active",
+            "hash": r["hash"],
+            "pattern": r["pattern"],
+            "category": r["category"],
+            "count": str(r["count"]),
+            "node_hostname": r["node_hostname"],
+            "node_os": r["node_os"],
+            "last_seen": r["last_seen"].isoformat() if r["last_seen"] else None,
+            "client_owned": str(r["client_owned"]),
+            "resolved": str(r["resolved"]),
         }
-    ok, out = psql(f"SELECT hash, category, summary, resolved_at FROM error_history WHERE hash='{err_hash}';")
-    if ok and out:
-        f = [x.strip() for x in out.split("|")]
-        return {"source": "history", "hash": f[0], "category": f[1],
-                "summary": f[2], "resolved_at": f[3]}
+
+    ok, rows = db_query(
+        "SELECT hash, category, summary, resolved_at FROM error_history WHERE hash = $1",
+        err_hash,
+    )
+    if ok and rows:
+        r = rows[0]
+        return {
+            "source": "history",
+            "hash": r["hash"],
+            "category": r["category"],
+            "summary": r["summary"],
+            "resolved_at": r["resolved_at"].isoformat() if r["resolved_at"] else None,
+        }
     return {"error": "unknown hash"}
 
 
 # ─── RESOLVE ERROR ───────────────────────────────────────────────────────────
 def resolve_error(err_hash: str, summary: str, node_hostname: str) -> dict:
-    ok, out = psql(f"SELECT category FROM error_patterns WHERE hash='{err_hash}';")
-    if not ok or not out:
+    ok, rows = db_query(
+        "SELECT category FROM error_patterns WHERE hash = $1",
+        err_hash,
+    )
+    if not ok or not rows:
         return {"error": "hash not found"}
 
-    category = out.strip()
-    ok, _ = psql(f"""
+    category = rows[0]["category"]
+
+    ok, _ = db_exec(
+        """
         INSERT INTO error_history (hash, category, summary, node_hostname)
-        VALUES ('{err_hash}', '{escape(category)}',
-                '{escape(summary)}', '{escape(node_hostname)}')
-        ON CONFLICT (hash) DO UPDATE SET summary=EXCLUDED.summary, resolved_at=NOW();
-    """)
+        VALUES ($1, $2, $3, $4)
+        ON CONFLICT (hash) DO UPDATE SET summary = EXCLUDED.summary, resolved_at = NOW()
+        """,
+        err_hash, category, summary, node_hostname,
+    )
     if not ok:
         return {"error": "insert history failed"}
 
-    psql(f"UPDATE error_patterns SET resolved=TRUE WHERE hash='{err_hash}';")
+    db_exec(
+        "UPDATE error_patterns SET resolved = TRUE WHERE hash = $1",
+        err_hash,
+    )
     return {"ok": True, "archived": err_hash}
 
 
