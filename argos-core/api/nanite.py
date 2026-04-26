@@ -16,7 +16,8 @@ import os
 import json
 import random
 import string
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
+from api.rate_limit import limiter
 from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime, timedelta
@@ -233,7 +234,8 @@ async def nanite_config(node_id: str):
 # ── Command queue ─────────────────────────────────────────────────────────────
 
 @router.post("/nanite/nodes/{node_id}/cmd")
-async def send_command_to_nanite(node_id: str, req: NaniteCommandRequest):
+@limiter.limit("20/minute")  # audit H4 — C2 channel, cap floods
+async def send_command_to_nanite(request: Request, node_id: str, req: NaniteCommandRequest):
     """ARGOS queues a command for nanite to execute.
 
     SECURITY (audit C5): this is effectively a command-and-control channel —

@@ -7,7 +7,8 @@ import json
 import secrets
 import asyncio
 import asyncssh
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
+from api.rate_limit import limiter
 from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime
@@ -587,7 +588,8 @@ async def test_iso(pool, build_id: str, proxmox_server_id: int, proxmox: dict) -
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.post("/iso/build")
-async def api_build_iso(req: BuildISORequest):
+@limiter.limit("5/minute")  # audit H4 — nix-build is heavy, disk DoS vector
+async def api_build_iso(request: Request, req: BuildISORequest):
     from api.main import pool
     return await build_iso(pool, req)
 

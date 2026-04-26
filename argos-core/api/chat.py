@@ -1,7 +1,8 @@
 import os
 import json
 import anthropic
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
+from api.rate_limit import limiter
 from pydantic import BaseModel
 from typing import Optional
 
@@ -245,7 +246,8 @@ async def estimate_cost(req: EstimateRequest):
 
 
 @router.post("/messages")
-async def send_message(req: MessageRequest):
+@limiter.limit("30/minute")  # audit H4 — denial-of-wallet on Anthropic API
+async def send_message(request: Request, req: MessageRequest):
     import asyncio
     from api.main import pool, build_prompt_for_conversation
 

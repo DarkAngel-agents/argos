@@ -3,6 +3,7 @@ import re
 import asyncpg
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends, Header, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
@@ -324,6 +325,41 @@ async def get_pool():
 
 
 app = FastAPI(lifespan=lifespan)
+
+# ─── CORS (audit H2) ─────────────────────────────────────────────────────────
+# Origins come from ARGOS_CORS_ORIGINS (comma-separated). Defaults to localhost
+# only. Wildcard "*" is explicitly refused — we never want it in production.
+_default_cors_origins = ["http://localhost:666", "http://127.0.0.1:666"]
+_cors_env = os.getenv("ARGOS_CORS_ORIGINS", "").strip()
+if _cors_env:
+    _cors_origins = [o.strip() for o in _cors_env.split(",") if o.strip()]
+    if "*" in _cors_origins:
+        print(
+            "[STARTUP] WARNING: ARGOS_CORS_ORIGINS contains '*' — refusing wildcard, "
+            "falling back to localhost only",
+            flush=True,
+        )
+        _cors_origins = _default_cors_origins
+else:
+    _cors_origins = _default_cors_origins
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_cors_origins,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["X-API-Key", "Content-Type", "Accept"],
+)
+print(f"[STARTUP] CORS allow_origins={_cors_origins}", flush=True)
+
+# ─── Rate limiting (audit H4) ────────────────────────────────────────────────
+from api.rate_limit import limiter
+from slowapi.errors import RateLimitExceeded
+from slowapi import _rate_limit_exceeded_handler
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+
 @app.middleware("http")
 async def catch_db_errors(request, call_next):
     try:
