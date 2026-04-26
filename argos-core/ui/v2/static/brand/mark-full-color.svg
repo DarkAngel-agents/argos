@@ -1,0 +1,10 @@
+<svg viewBox="0 0 240 280" xmlns="http://www.w3.org/2000/svg">
+
+  <path d="M 24 14 Q 24 8 30 8 L 210 8 Q 216 8 216 14&#xA;                 L 216 148 Q 216 176 120 264 Q 24 176 24 148 Z" fill="#0b0e14" stroke="#c49a6c" stroke-width="2.5" stroke-linejoin="round"></path>
+  
+  <polygon points="120,34 64,232 96,232 120,88" fill="#c49a6c"></polygon>
+  <polygon points="120,34 176,232 144,232 120,88" fill="#c49a6c"></polygon>
+  <rect x="114" y="188" width="12" height="48" fill="#c49a6c"></rect>
+
+
+</svg>

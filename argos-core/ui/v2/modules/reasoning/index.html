@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1440">
+<title>ARGOS — Reasoning</title>
+
+<link rel="icon" href="/favicon.ico" type="image/x-icon">
+<link rel="stylesheet" href="../../static/tokens.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div x-data="app()" x-cloak>
+
+  <div class="shell">
+
+    <header class="topbar">
+      <a class="topbar__brand" href="../../../index.html">
+        <img src="/ui/v2/static/brand/mark-full-color.svg" alt="">
+        <span class="topbar__wordmark">ARGOS</span>
+      </a>
+      <span class="topbar__divider"></span>
+      <div class="topbar__module">
+        <span>Reasoning</span>
+        <span class="crumb-sep">/</span>
+        <strong x-text="moduleSubtitle()"></strong>
+      </div>
+
+      <div class="topbar__search" @click="openPalette()">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+        <span>Search or run command</span>
+        <span class="kbd">⌘K</span>
+      </div>
+
+      <div class="topbar__right">
+        <div class="topbar__conn">
+          <span class="dot" :class="connected ? 'dot--ok' : 'dot--error dot--pulse'"></span>
+          <span x-text="connected ? 'live' : 'reconnecting'"></span>
+        </div>
+        <div class="topbar__user" title="operator@hermes">op</div>
+      </div>
+    </header>
+
+    <aside class="sidebar">
+      <div class="side-section">
+        <div class="side-section__label">Modules</div>
+        <a class="nav-item" href="../approvals/index.html"><span class="nav-item__icon"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 7h18M3 12h18M3 17h12"/></svg></span>Approvals<span class="nav-item__shortcut">g a</span></a>
+        <a class="nav-item" href="../fleet/index.html"><span class="nav-item__icon"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg></span>Fleet<span class="nav-item__shortcut">g f</span></a>
+        <a class="nav-item" href="../jobs/index.html"><span class="nav-item__icon"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M8 5v14l11-7z"/></svg></span>Jobs<span class="nav-item__shortcut">g j</span></a>
+        <a class="nav-item" href="../health/index.html"><span class="nav-item__icon"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 12h-4l-3 9-6-18-3 9H2"/></svg></span>Health<span class="nav-item__shortcut">g h</span></a>
+        <a class="nav-item" href="../chats/index.html"><span class="nav-item__icon"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>Chat<span class="nav-item__shortcut">g c</span></a>
+        <a class="nav-item is-active" href="./index.html"><span class="nav-item__icon"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>Reasoning<span class="nav-item__count num" x-text="entries.length"></span></a>
+        <a class="nav-item" href="../settings/index.html"><span class="nav-item__icon"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="3"/></svg></span>Settings<span class="nav-item__shortcut">g s</span></a>
+      </div>
+
+      <div class="side-section">
+        <div class="side-section__label">Conversations</div>
+        <div class="side-search">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="color: var(--text-tertiary);"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+          <input type="text" placeholder="filter…" x-model="search">
+        </div>
+        <div class="filter-group" style="max-height: calc(100vh - 320px); overflow-y: auto;">
+          <template x-for="c in filteredConvs" :key="c.id">
+            <label class="filter-row" :class="{'is-checked': selected == c.id}" @click.prevent="selected = c.id; loadEntries()">
+              <input type="radio" :checked="selected == c.id">
+              <span class="mono" style="color: var(--text-tertiary);" x-text="'#' + c.id"></span>
+              <span x-text="c.title || '(no title)'" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"></span>
+            </label>
+          </template>
+          <div x-show="filteredConvs.length === 0" style="padding: var(--s-2); color: var(--text-tertiary); font-size: var(--fs-11);">no matches</div>
+        </div>
+      </div>
+    </aside>
+
+    <main class="main">
+
+      <template x-if="!connected">
+        <div class="banner banner--error">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4m0 4h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/></svg>
+          <span class="banner__msg">SSE disconnected — reconnecting</span>
+          <span class="spacer"></span>
+        </div>
+      </template>
+
+      <template x-if="error">
+        <div class="banner banner--error">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+          <span class="banner__msg" x-text="error"></span>
+          <span class="spacer"></span>
+          <button class="btn btn--ghost" @click="error = null">Dismiss</button>
+        </div>
+      </template>
+
+      <div class="module__head">
+        <h1 class="module__title">Reasoning</h1>
+        <span class="module__sub" x-show="selected">
+          conversation <span class="mono" x-text="'#' + selected"></span> ·
+          <span class="num" x-text="entries.length"></span> entries
+        </span>
+        <div class="module__actions">
+          <button class="btn btn--ghost" @click="loadEntries()" :disabled="loading || !selected">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 12a9 9 0 0 1 15-6.7L21 8M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16M3 21v-5h5"/></svg>
+            <span x-text="loading ? 'Loading…' : 'Refresh'"></span>
+          </button>
+        </div>
+      </div>
+
+      <div class="module__body">
+        <div class="queue">
+          <template x-if="!selected">
+            <div class="empty">
+              <div class="empty__inner">
+                <img class="empty__mark" src="/ui/v2/static/brand/mark-mono-amber.svg" alt="">
+                <h2 class="empty__title">Pick a conversation</h2>
+                <div class="empty__sub">Select one from the sidebar to view its reasoning timeline.</div>
+              </div>
+            </div>
+          </template>
+          <template x-for="(e, i) in entries" :key="i">
+            <article class="card reasoning-row" :data-reasoning-type="e.type">
+              <header class="card__head">
+                <span class="dot" :class="'reason-dot--' + e.type"></span>
+                <span class="card__kind" x-text="e.type"></span>
+                <span class="spacer"></span>
+                <span class="mono" x-text="formatTs(e.ts)"></span>
+              </header>
+              <div class="card__op" style="white-space: pre-wrap; max-height: 200px; overflow-y: auto;" x-text="e.content"></div>
+            </article>
+          </template>
+          <template x-if="selected && !loading && entries.length === 0">
+            <div class="empty">
+              <div class="empty__inner">
+                <h2 class="empty__title">No entries</h2>
+                <div class="empty__sub">No reasoning entries for this conversation.</div>
+              </div>
+            </div>
+          </template>
+          <template x-if="selected && loading">
+            <div class="empty"><div class="empty__inner"><div class="empty__sub">Loading entries…</div></div></div>
+          </template>
+        </div>
+      </div>
+    </main>
+
+    <aside class="rail">
+      <div class="rail__head">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="color: var(--accent);"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+        <span class="rail__title">Now</span>
+        <span class="spacer" style="flex: 1;"></span>
+        <span class="dot" :class="connected ? 'dot--ok dot--pulse' : 'dot--error'"></span>
+        <span class="mono" style="color: var(--text-tertiary); font-size: var(--fs-11);" x-text="connected ? 'live' : 'paused'"></span>
+      </div>
+      <div class="rail__body">
+        <template x-for="item in feed" :key="item.uid">
+          <div class="feed-item" :class="'feed-item--' + item.kind">
+            <span class="feed-item__time" x-text="item.t"></span>
+            <div class="feed-item__body">
+              <div class="feed-item__title" x-text="item.title"></div>
+              <div class="feed-item__sub" x-text="item.sub"></div>
+            </div>
+          </div>
+        </template>
+        <template x-if="feed.length === 0">
+          <div style="padding: var(--s-3); color: var(--text-tertiary); font-size: var(--fs-12);">waiting for events…</div>
+        </template>
+      </div>
+    </aside>
+
+    <footer class="statusbar">
+      <span class="seg-group"><span class="dot dot--ok"></span><span class="label">conv:</span><span x-text="conversations.length"></span></span>
+      <span class="seg-group"><span class="dot" :class="connected ? 'dot--ok' : 'dot--error'"></span><span class="label">sse:</span><span x-text="connected ? 'live' : 'down'"></span></span>
+      <span class="seg-group"><span class="label">selected:</span><span x-text="selected ? '#' + selected : '—'"></span></span>
+      <span class="spacer"></span>
+      <span class="label">argos v0.7.0 · ui v2 · reasoning</span>
+    </footer>
+
+  </div>
+
+  <template x-if="paletteOpen">
+    <div class="palette-backdrop" @click.self="closePalette()">
+      <div class="palette" role="dialog">
+        <input x-model="paletteQuery" @keydown.escape.stop="closePalette()" class="palette__input" type="text" autofocus placeholder="Search or run command…">
+        <template x-for="(a, i) in paletteResults" :key="i">
+          <div class="palette__item" :class="{'is-active': i === paletteSelectedIdx}" @click="runPaletteAction(i)">
+            <span x-text="a.label"></span><span class="spacer"></span><span class="meta" x-text="a.hint"></span>
+          </div>
+        </template>
+        <div class="palette__foot">
+          <span class="hint"><span class="kbd">↑↓</span> navigate</span>
+          <span class="hint"><span class="kbd">⏎</span> run</span>
+          <span class="hint"><span class="kbd">esc</span> close</span>
+          <span class="spacer" style="flex:1;"></span>
+          <span class="mono" style="color: var(--text-disabled);" x-text="paletteResults.length + ' matches'"></span>
+        </div>
+      </div>
+    </div>
+  </template>
+
+</div>
+
+<script src="https://unpkg.com/alpinejs@3.14.1/dist/cdn.min.js" defer></script>
+<script>
+function app() {
+  return {
+    conversations: [], selected: '', entries: [], search: '',
+    loading: false, error: null, lastLoadedAt: null,
+    connected: false, _reconnectDelay: 1000, _reconnectTimer: null, _es: null,
+    paletteOpen: false, paletteQuery: '', paletteSelectedIdx: 0,
+    feed: [], _feedSeq: 0,
+
+    init() {
+      window.addEventListener('keydown', (e) => this.onGlobalKey(e));
+      this.$watch('paletteQuery', () => { this.paletteSelectedIdx = 0; });
+      this.loadConvs();
+      this.connectStream();
+    },
+
+    async loadConvs() {
+      try {
+        const r = await fetch('/api/conversations');
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const data = await r.json();
+        this.conversations = (Array.isArray(data) ? data : (data.conversations || []))
+          .sort((a, b) => (b.updated_at || '').localeCompare(a.updated_at || ''));
+        if (this.conversations.length > 0 && !this.selected) {
+          this.selected = this.conversations[0].id;
+          this.loadEntries();
+        }
+      } catch (e) { this.error = 'load convs failed: ' + e.message; }
+    },
+
+    async loadEntries() {
+      if (!this.selected) return;
+      this.loading = true; this.error = null;
+      try {
+        const r = await fetch('/api/conversations/' + this.selected + '/reasoning');
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const data = await r.json();
+        this.entries = Array.isArray(data) ? data : (data.entries || data.reasoning || []);
+        this.lastLoadedAt = Date.now();
+      } catch (e) {
+        this.error = 'load reasoning failed: ' + e.message;
+        this.entries = [];
+      } finally { this.loading = false; }
+    },
+
+    get filteredConvs() {
+      const s = this.search.toLowerCase().trim();
+      if (!s) return this.conversations;
+      return this.conversations.filter(c =>
+        (c.title || '').toLowerCase().includes(s) || String(c.id).includes(s));
+    },
+
+    moduleSubtitle() {
+      if (!this.selected) return 'pick a conversation';
+      return '#' + this.selected + ' · ' + this.entries.length + ' entries';
+    },
+
+    formatTs(ts) {
+      if (!ts) return '-';
+      try { return new Date(ts).toLocaleString('ro-RO', {month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'}); }
+      catch (e) { return ts; }
+    },
+
+    connectStream() {
+      if (this._reconnectTimer) { clearTimeout(this._reconnectTimer); this._reconnectTimer = null; }
+      if (this._es) { try { this._es.close(); } catch (e) {} }
+      this._es = new EventSource('/api/stream/activity');
+      this._es.onopen = () => { this.connected = true; this._reconnectDelay = 1000; };
+      this._es.onerror = () => {
+        if (this._reconnectTimer) return;
+        this.connected = false;
+        try { this._es.close(); } catch (e) {}
+        const base = this._reconnectDelay;
+        const jitter = base * (0.8 + Math.random() * 0.4);
+        this._reconnectDelay = Math.min(base * 2, 30000);
+        this._reconnectTimer = setTimeout(() => { this._reconnectTimer = null; this.connectStream(); }, jitter);
+      };
+      this._es.addEventListener('hello', () => { this.connected = true; this.pushFeed('info', 'stream connected', ''); });
+      this._es.addEventListener('reasoning_entry', (e) => {
+        try { const d = JSON.parse(e.data); this.pushFeed('info', 'reasoning #' + d.conversation_id, d.type || ''); if (this.selected == d.conversation_id) this.loadEntries(); } catch (err) {}
+      });
+    },
+    pushFeed(kind, title, sub, ts) {
+      this._feedSeq++;
+      const t = ts ? new Date(ts) : new Date();
+      this.feed.unshift({ uid: this._feedSeq, kind, title, sub, t: t.toTimeString().slice(0, 5) });
+      if (this.feed.length > 50) this.feed.length = 50;
+    },
+
+    openPalette() { this.paletteOpen = true; this.paletteQuery = ''; this.paletteSelectedIdx = 0; },
+    closePalette() { this.paletteOpen = false; this.paletteQuery = ''; },
+    runPaletteAction(idx) {
+      const r = this.paletteResults;
+      if (idx < 0 || idx >= r.length) return;
+      const a = r[idx];
+      this.closePalette();
+      this.$nextTick(() => a.run());
+    },
+    get paletteActions() {
+      return [
+        { label: 'Refresh entries',  hint: 'reload reasoning entries',     run: () => this.loadEntries() },
+        { label: 'Reload conversations', hint: 'refresh conversation list', run: () => this.loadConvs() },
+        { label: 'Open Chats',       hint: 'navigate to chats module',     run: () => location.href = '../chats/index.html' }
+      ];
+    },
+    get paletteResults() {
+      const q = this.paletteQuery.trim().toLowerCase();
+      if (!q) return this.paletteActions;
+      return this.paletteActions.filter(a => a.label.toLowerCase().includes(q) || a.hint.toLowerCase().includes(q));
+    },
+
+    _isTypingTarget(evt) { const t = evt.target; return t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable); },
+    onGlobalKey(evt) {
+      const k = evt.key;
+      if ((evt.ctrlKey || evt.metaKey) && (k === 'k' || k === 'K')) { this.openPalette(); evt.preventDefault(); return; }
+      if (this.paletteOpen) {
+        if (k === 'Escape') { this.closePalette(); evt.preventDefault(); return; }
+        if (k === 'Enter')  { this.runPaletteAction(this.paletteSelectedIdx); evt.preventDefault(); return; }
+        if (k === 'ArrowDown') { this.paletteSelectedIdx = Math.min(this.paletteSelectedIdx + 1, this.paletteResults.length - 1); evt.preventDefault(); return; }
+        if (k === 'ArrowUp')   { this.paletteSelectedIdx = Math.max(this.paletteSelectedIdx - 1, 0); evt.preventDefault(); return; }
+        return;
+      }
+      if (this._isTypingTarget(evt)) return;
+      if (k === 'r' || k === 'R') { this.loadEntries(); evt.preventDefault(); }
+    }
+  };
+}
+</script>
+</body>
+</html>

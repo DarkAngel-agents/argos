@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1440">
+<title>ARGOS — Settings</title>
+
+<link rel="icon" href="/favicon.ico" type="image/x-icon">
+<link rel="stylesheet" href="../../static/tokens.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div x-data="app()" x-cloak>
+
+  <div class="shell">
+
+    <header class="topbar">
+      <a class="topbar__brand" href="../../../index.html">
+        <img src="/ui/v2/static/brand/mark-full-color.svg" alt="">
+        <span class="topbar__wordmark">ARGOS</span>
+      </a>
+      <span class="topbar__divider"></span>
+      <div class="topbar__module">
+        <span>Settings</span>
+        <span class="crumb-sep">/</span>
+        <strong x-text="moduleSubtitle()"></strong>
+      </div>
+
+      <div class="topbar__search" @click="openPalette()">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+        <span>Search or run command</span>
+        <span class="kbd">⌘K</span>
+      </div>
+
+      <div class="topbar__right">
+        <div class="topbar__conn">
+          <span class="dot" :class="connected ? 'dot--ok' : 'dot--error dot--pulse'"></span>
+          <span x-text="connected ? 'live' : 'reconnecting'"></span>
+        </div>
+        <div class="topbar__user" title="operator@hermes">op</div>
+      </div>
+    </header>
+
+    <aside class="sidebar">
+      <div class="side-section">
+        <div class="side-section__label">Modules</div>
+        <a class="nav-item" href="../approvals/index.html"><span class="nav-item__icon"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 7h18M3 12h18M3 17h12"/></svg></span>Approvals<span class="nav-item__shortcut">g a</span></a>
+        <a class="nav-item" href="../fleet/index.html"><span class="nav-item__icon"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg></span>Fleet<span class="nav-item__shortcut">g f</span></a>
+        <a class="nav-item" href="../jobs/index.html"><span class="nav-item__icon"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M8 5v14l11-7z"/></svg></span>Jobs<span class="nav-item__shortcut">g j</span></a>
+        <a class="nav-item" href="../health/index.html"><span class="nav-item__icon"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 12h-4l-3 9-6-18-3 9H2"/></svg></span>Health<span class="nav-item__shortcut">g h</span></a>
+        <a class="nav-item" href="../chats/index.html"><span class="nav-item__icon"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>Chat<span class="nav-item__shortcut">g c</span></a>
+        <a class="nav-item" href="../reasoning/index.html"><span class="nav-item__icon"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>Reasoning<span class="nav-item__shortcut">g r</span></a>
+        <a class="nav-item is-active" href="./index.html"><span class="nav-item__icon"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="3"/></svg></span>Settings</a>
+      </div>
+
+      <div class="side-section">
+        <div class="side-section__label">Sections</div>
+        <template x-for="s in sections" :key="s.id">
+          <a class="nav-item" :class="{'is-active': activeSection === s.id}" href="#" @click.prevent="activeSection = s.id; scrollToSection(s.id)">
+            <span class="nav-item__icon"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9"/></svg></span>
+            <span x-text="s.label"></span>
+          </a>
+        </template>
+      </div>
+    </aside>
+
+    <main class="main">
+
+      <template x-if="!connected">
+        <div class="banner banner--error">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4m0 4h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/></svg>
+          <span class="banner__msg">SSE disconnected — reconnecting</span>
+          <span class="spacer"></span>
+        </div>
+      </template>
+
+      <template x-if="error">
+        <div class="banner banner--error">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+          <span class="banner__msg" x-text="error"></span>
+          <span class="spacer"></span>
+          <button class="btn btn--ghost" @click="error = null">Dismiss</button>
+        </div>
+      </template>
+
+      <div class="module__head">
+        <h1 class="module__title">Settings</h1>
+        <span class="module__sub">configure providers · reasoning · prompt modules</span>
+        <div class="module__actions">
+          <button class="btn btn--ghost" @click="loadAll()" :disabled="loading">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 12a9 9 0 0 1 15-6.7L21 8M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16M3 21v-5h5"/></svg>
+            <span x-text="loading ? 'Loading…' : 'Refresh'"></span>
+          </button>
+        </div>
+      </div>
+
+      <div class="module__body">
+        <div class="queue">
+
+          <!-- LLM PROVIDERS -->
+          <section class="settings-section" id="section-providers">
+            <div class="section-label" style="margin-bottom: var(--s-3);">LLM PROVIDERS</div>
+            <template x-for="p in providers" :key="p.key">
+              <article class="card">
+                <header class="card__head">
+                  <span class="dot" :class="p.value === 'true' ? 'dot--ok' : 'dot--idle'"></span>
+                  <span class="auth-id" x-text="p.label"></span>
+                  <span class="card__kind" x-text="p.key"></span>
+                  <span x-show="p.disabled" class="risk risk--high" style="font-size: 9px;">unavailable</span>
+                  <span class="spacer"></span>
+                  <button class="btn" :class="p.value === 'true' ? 'btn--primary' : 'btn--ghost'"
+                          :disabled="p.disabled" @click="toggleProvider(p)">
+                    <span x-text="p.value === 'true' ? 'ON' : (p.value === 'false' ? 'OFF' : '?')"></span>
+                  </button>
+                </header>
+              </article>
+            </template>
+          </section>
+
+          <!-- REASONING MODE -->
+          <section class="settings-section" id="section-reasoning">
+            <div class="section-label" style="margin-bottom: var(--s-3); margin-top: var(--s-5);">REASONING MODE</div>
+            <article class="card">
+              <header class="card__head">
+                <span class="dot" :class="reasoningMode === 'full' ? 'dot--ok' : 'dot--idle'"></span>
+                <span class="auth-id" x-text="'mode: ' + (reasoningMode || '?')"></span>
+                <span class="spacer"></span>
+                <button class="btn" :class="reasoningMode === 'full' ? 'btn--primary' : 'btn--ghost'"
+                        :disabled="reasoningDisabled" @click="toggleReasoning()">
+                  <span x-text="reasoningMode === 'full' ? 'FULL' : 'AXIOMS'"></span>
+                </button>
+              </header>
+              <div class="card__meta">
+                <span style="color: var(--text-tertiary);">axioms = static rules only · full = + DB reasoning_log</span>
+              </div>
+            </article>
+          </section>
+
+          <!-- LANGUAGE -->
+          <section class="settings-section" id="section-language">
+            <div class="section-label" style="margin-bottom: var(--s-3); margin-top: var(--s-5);">LANGUAGE</div>
+            <article class="card">
+              <header class="card__head">
+                <span class="auth-id">Interface language</span>
+                <span class="spacer"></span>
+                <div class="seg">
+                  <button class="seg__btn is-active">RO</button>
+                  <button class="seg__btn" disabled>EN</button>
+                  <button class="seg__btn" disabled>DE</button>
+                </div>
+              </header>
+              <div class="card__meta">
+                <span style="color: var(--text-tertiary);">RO active · EN/DE translations coming in iter2</span>
+              </div>
+            </article>
+          </section>
+
+          <!-- PROMPT MODULES -->
+          <section class="settings-section" id="section-modules">
+            <div class="section-label" style="margin-bottom: var(--s-3); margin-top: var(--s-5);">
+              PROMPT MODULES
+              <span class="mono" style="color: var(--text-tertiary); margin-left: var(--s-2);" x-text="modules.length + ' modules'"></span>
+            </div>
+            <div style="font-size: var(--fs-12); color: var(--text-tertiary); margin-bottom: var(--s-3);">
+              read-only · editor coming in iter2
+            </div>
+            <template x-for="m in modules" :key="m.name">
+              <article class="card">
+                <header class="card__head">
+                  <span class="dot" :class="m.active ? 'dot--ok' : 'dot--idle'"></span>
+                  <span class="auth-id" x-text="m.display_name || m.name"></span>
+                  <span class="card__kind" x-text="m.category"></span>
+                  <span class="mono" style="color: var(--text-tertiary);" x-text="'p' + (m.priority ?? '?')"></span>
+                  <span class="spacer"></span>
+                  <span class="risk" :class="m.active ? 'risk--low' : 'risk--medium'" x-text="m.active ? 'active' : 'inactive'"></span>
+                </header>
+              </article>
+            </template>
+            <template x-if="modules.length === 0 && !loading">
+              <div style="padding: var(--s-4); color: var(--text-tertiary); font-size: var(--fs-12);">no modules loaded</div>
+            </template>
+          </section>
+
+          <!-- AUTH -->
+          <section class="settings-section" id="section-auth">
+            <div class="section-label" style="margin-bottom: var(--s-3); margin-top: var(--s-5);">AUTH</div>
+            <article class="card">
+              <div class="card__op">single-user mode · backend auth coming in iter2</div>
+              <dl class="kv">
+                <dt>user</dt><dd>darkangel</dd>
+                <dt>session</dt><dd>local</dd>
+                <dt>2FA</dt><dd>no</dd>
+              </dl>
+            </article>
+          </section>
+
+          <!-- KEYBOARD -->
+          <section class="settings-section" id="section-keyboard">
+            <div class="section-label" style="margin-bottom: var(--s-3); margin-top: var(--s-5);">KEYBOARD</div>
+            <article class="card">
+              <div class="card__meta" style="flex-direction: column; align-items: flex-start; gap: var(--s-2);">
+                <span><kbd class="kbd">⌘K</kbd> · <kbd class="kbd">Ctrl+K</kbd> command palette</span>
+                <span><kbd class="kbd">R</kbd> refresh module data</span>
+                <span><kbd class="kbd">Esc</kbd> close drawer / palette</span>
+              </div>
+            </article>
+          </section>
+
+        </div>
+      </div>
+    </main>
+
+    <aside class="rail">
+      <div class="rail__head">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="color: var(--accent);"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+        <span class="rail__title">Now</span>
+        <span class="spacer" style="flex: 1;"></span>
+        <span class="dot" :class="connected ? 'dot--ok dot--pulse' : 'dot--error'"></span>
+        <span class="mono" style="color: var(--text-tertiary); font-size: var(--fs-11);" x-text="connected ? 'live' : 'paused'"></span>
+      </div>
+      <div class="rail__body">
+        <template x-for="item in feed" :key="item.uid">
+          <div class="feed-item" :class="'feed-item--' + item.kind">
+            <span class="feed-item__time" x-text="item.t"></span>
+            <div class="feed-item__body">
+              <div class="feed-item__title" x-text="item.title"></div>
+              <div class="feed-item__sub" x-text="item.sub"></div>
+            </div>
+          </div>
+        </template>
+        <template x-if="feed.length === 0">
+          <div style="padding: var(--s-3); color: var(--text-tertiary); font-size: var(--fs-12);">waiting for events…</div>
+        </template>
+      </div>
+    </aside>
+
+    <footer class="statusbar">
+      <span class="seg-group"><span class="dot dot--ok"></span><span class="label">providers:</span><span x-text="providers.filter(p => p.value === 'true').length + '/' + providers.length"></span></span>
+      <span class="seg-group"><span class="dot" :class="connected ? 'dot--ok' : 'dot--error'"></span><span class="label">sse:</span><span x-text="connected ? 'live' : 'down'"></span></span>
+      <span class="seg-group"><span class="label">modules:</span><span class="num" x-text="modules.length"></span></span>
+      <span class="spacer"></span>
+      <span class="label">argos v0.7.0 · ui v2 · settings</span>
+    </footer>
+
+  </div>
+
+  <template x-if="paletteOpen">
+    <div class="palette-backdrop" @click.self="closePalette()">
+      <div class="palette" role="dialog">
+        <input x-model="paletteQuery" @keydown.escape.stop="closePalette()" class="palette__input" type="text" autofocus placeholder="Search or run command…">
+        <template x-for="(a, i) in paletteResults" :key="i">
+          <div class="palette__item" :class="{'is-active': i === paletteSelectedIdx}" @click="runPaletteAction(i)">
+            <span x-text="a.label"></span><span class="spacer"></span><span class="meta" x-text="a.hint"></span>
+          </div>
+        </template>
+        <div class="palette__foot">
+          <span class="hint"><span class="kbd">↑↓</span> navigate</span>
+          <span class="hint"><span class="kbd">⏎</span> run</span>
+          <span class="hint"><span class="kbd">esc</span> close</span>
+          <span class="spacer" style="flex:1;"></span>
+          <span class="mono" style="color: var(--text-disabled);" x-text="paletteResults.length + ' matches'"></span>
+        </div>
+      </div>
+    </div>
+  </template>
+
+</div>
+
+<script src="https://unpkg.com/alpinejs@3.14.1/dist/cdn.min.js" defer></script>
+<script>
+function app() {
+  return {
+    providers: [
+      { key: 'claude_enabled', label: 'Claude (Anthropic)', value: '?', disabled: false },
+      { key: 'local_enabled',  label: 'Local (Ollama)',     value: '?', disabled: false }
+    ],
+    reasoningMode: '?',
+    reasoningDisabled: false,
+    modules: [],
+    loading: false,
+    error: null,
+    activeSection: 'providers',
+    sections: [
+      { id: 'providers',  label: 'LLM Providers' },
+      { id: 'reasoning',  label: 'Reasoning Mode' },
+      { id: 'language',   label: 'Language' },
+      { id: 'modules',    label: 'Prompt Modules' },
+      { id: 'auth',       label: 'Auth' },
+      { id: 'keyboard',   label: 'Keyboard' }
+    ],
+    connected: false, _reconnectDelay: 1000, _reconnectTimer: null, _es: null,
+    paletteOpen: false, paletteQuery: '', paletteSelectedIdx: 0,
+    feed: [], _feedSeq: 0,
+
+    init() {
+      window.addEventListener('keydown', (e) => this.onGlobalKey(e));
+      this.$watch('paletteQuery', () => { this.paletteSelectedIdx = 0; });
+      this.loadAll();
+      this.connectStream();
+    },
+
+    async loadAll() {
+      this.loading = true; this.error = null;
+      await Promise.all(this.providers.map(p => this.loadProvider(p)));
+      try {
+        const r = await fetch('/api/reasoning-mode');
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const d = await r.json();
+        this.reasoningMode = d.mode || 'unknown';
+      } catch (e) {
+        this.reasoningDisabled = true;
+        this.reasoningMode = 'n/a';
+      }
+      try {
+        const r = await fetch('/api/prompt-modules');
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const d = await r.json();
+        this.modules = (d.modules || []).sort((a, b) => (a.priority || 0) - (b.priority || 0));
+      } catch (e) { this.modules = []; }
+      this.loading = false;
+    },
+    async loadProvider(p) {
+      try {
+        const r = await fetch('/api/settings/' + p.key);
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const d = await r.json();
+        p.value = d.value || 'false';
+        p.disabled = false;
+      } catch (e) { p.value = '?'; p.disabled = true; }
+    },
+    async toggleProvider(p) {
+      if (p.disabled) return;
+      const newVal = p.value === 'true' ? 'false' : 'true';
+      try {
+        const r = await fetch('/api/settings/' + p.key + '?value=' + newVal, { method: 'POST' });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const d = await r.json();
+        p.value = d.value;
+      } catch (e) { this.error = 'toggle ' + p.key + ' failed: ' + e.message; }
+    },
+    async toggleReasoning() {
+      if (this.reasoningDisabled) return;
+      const newMode = this.reasoningMode === 'full' ? 'local' : 'full';
+      try {
+        const r = await fetch('/api/reasoning-mode', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mode: newMode })
+        });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const d = await r.json();
+        this.reasoningMode = d.mode || newMode;
+      } catch (e) { this.error = 'reasoning toggle failed: ' + e.message; }
+    },
+
+    moduleSubtitle() {
+      const enabled = this.providers.filter(p => p.value === 'true').length;
+      return enabled + '/' + this.providers.length + ' providers · reasoning ' + this.reasoningMode;
+    },
+    scrollToSection(id) {
+      const el = document.getElementById('section-' + id);
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    },
+
+    connectStream() {
+      if (this._reconnectTimer) { clearTimeout(this._reconnectTimer); this._reconnectTimer = null; }
+      if (this._es) { try { this._es.close(); } catch (e) {} }
+      this._es = new EventSource('/api/stream/activity');
+      this._es.onopen = () => { this.connected = true; this._reconnectDelay = 1000; };
+      this._es.onerror = () => {
+        if (this._reconnectTimer) return;
+        this.connected = false;
+        try { this._es.close(); } catch (e) {}
+        const base = this._reconnectDelay;
+        const jitter = base * (0.8 + Math.random() * 0.4);
+        this._reconnectDelay = Math.min(base * 2, 30000);
+        this._reconnectTimer = setTimeout(() => { this._reconnectTimer = null; this.connectStream(); }, jitter);
+      };
+      this._es.addEventListener('hello', () => { this.connected = true; this.pushFeed('info', 'stream connected', ''); });
+    },
+    pushFeed(kind, title, sub, ts) {
+      this._feedSeq++;
+      const t = ts ? new Date(ts) : new Date();
+      this.feed.unshift({ uid: this._feedSeq, kind, title, sub, t: t.toTimeString().slice(0, 5) });
+      if (this.feed.length > 50) this.feed.length = 50;
+    },
+
+    openPalette() { this.paletteOpen = true; this.paletteQuery = ''; this.paletteSelectedIdx = 0; },
+    closePalette() { this.paletteOpen = false; this.paletteQuery = ''; },
+    runPaletteAction(idx) {
+      const r = this.paletteResults;
+      if (idx < 0 || idx >= r.length) return;
+      const a = r[idx];
+      this.closePalette();
+      this.$nextTick(() => a.run());
+    },
+    get paletteActions() {
+      const acts = [
+        { label: 'Reload settings',     hint: 'reload all settings',         run: () => this.loadAll() },
+        { label: 'Toggle reasoning',    hint: 'switch axioms ↔ full',         run: () => this.toggleReasoning() }
+      ];
+      for (const p of this.providers) {
+        acts.push({ label: 'Toggle ' + p.label, hint: 'switch on/off', run: () => this.toggleProvider(p) });
+      }
+      for (const s of this.sections) {
+        acts.push({ label: 'Go to ' + s.label, hint: 'scroll to section', run: () => { this.activeSection = s.id; this.scrollToSection(s.id); }});
+      }
+      return acts;
+    },
+    get paletteResults() {
+      const q = this.paletteQuery.trim().toLowerCase();
+      if (!q) return this.paletteActions;
+      return this.paletteActions.filter(a => a.label.toLowerCase().includes(q) || a.hint.toLowerCase().includes(q));
+    },
+
+    _isTypingTarget(evt) { const t = evt.target; return t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable); },
+    onGlobalKey(evt) {
+      const k = evt.key;
+      if ((evt.ctrlKey || evt.metaKey) && (k === 'k' || k === 'K')) { this.openPalette(); evt.preventDefault(); return; }
+      if (this.paletteOpen) {
+        if (k === 'Escape') { this.closePalette(); evt.preventDefault(); return; }
+        if (k === 'Enter')  { this.runPaletteAction(this.paletteSelectedIdx); evt.preventDefault(); return; }
+        if (k === 'ArrowDown') { this.paletteSelectedIdx = Math.min(this.paletteSelectedIdx + 1, this.paletteResults.length - 1); evt.preventDefault(); return; }
+        if (k === 'ArrowUp')   { this.paletteSelectedIdx = Math.max(this.paletteSelectedIdx - 1, 0); evt.preventDefault(); return; }
+        return;
+      }
+      if (this._isTypingTarget(evt)) return;
+      if (k === 'r' || k === 'R') { this.loadAll(); evt.preventDefault(); }
+    }
+  };
+}
+</script>
+</body>
+</html>

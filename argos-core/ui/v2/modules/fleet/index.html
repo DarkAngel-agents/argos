@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1440">
+<title>ARGOS — Fleet</title>
+
+<link rel="icon" href="/favicon.ico" type="image/x-icon">
+<link rel="stylesheet" href="../../static/tokens.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div x-data="app()" x-cloak>
+
+  <div class="shell">
+
+    <!-- TOPBAR -->
+    <header class="topbar">
+      <a class="topbar__brand" href="../../../index.html">
+        <img src="/ui/v2/static/brand/mark-full-color.svg" alt="">
+        <span class="topbar__wordmark">ARGOS</span>
+      </a>
+      <span class="topbar__divider"></span>
+      <div class="topbar__module">
+        <span>Fleet</span>
+        <span class="crumb-sep">/</span>
+        <strong x-text="moduleSubtitle()"></strong>
+      </div>
+
+      <div class="topbar__search" @click="openPalette()">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+        <span>Search or run command</span>
+        <span class="kbd">⌘K</span>
+      </div>
+
+      <div class="topbar__right">
+        <div class="topbar__conn">
+          <span class="dot" :class="connected ? 'dot--ok' : 'dot--error dot--pulse'"></span>
+          <span x-text="connected ? 'live' : 'reconnecting'"></span>
+        </div>
+        <div class="topbar__user" title="operator@hermes">op</div>
+      </div>
+    </header>
+
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+      <div class="side-section">
+        <div class="side-section__label">Modules</div>
+        <a class="nav-item" href="../approvals/index.html">
+          <span class="nav-item__icon">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 7h18M3 12h18M3 17h12"/></svg>
+          </span>
+          Approvals
+          <span class="nav-item__shortcut">g a</span>
+        </a>
+        <a class="nav-item is-active" href="./index.html">
+          <span class="nav-item__icon">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+          </span>
+          Fleet
+          <span class="nav-item__count num" x-text="data ? (data.counts?.total ?? 0) : '·'"></span>
+        </a>
+        <a class="nav-item" href="../jobs/index.html">
+          <span class="nav-item__icon">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M8 5v14l11-7z"/></svg>
+          </span>
+          Jobs
+          <span class="nav-item__shortcut">g j</span>
+        </a>
+        <a class="nav-item" href="../health/index.html">
+          <span class="nav-item__icon">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 12h-4l-3 9-6-18-3 9H2"/></svg>
+          </span>
+          Health
+          <span class="nav-item__shortcut">g h</span>
+        </a>
+        <a class="nav-item" href="../chats/index.html">
+          <span class="nav-item__icon">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          </span>
+          Chat
+          <span class="nav-item__shortcut">g c</span>
+        </a>
+        <a class="nav-item" href="../reasoning/index.html">
+          <span class="nav-item__icon">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+          </span>
+          Reasoning
+          <span class="nav-item__shortcut">g r</span>
+        </a>
+        <a class="nav-item" href="../settings/index.html">
+          <span class="nav-item__icon">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          </span>
+          Settings
+          <span class="nav-item__shortcut">g s</span>
+        </a>
+      </div>
+
+      <div class="side-section">
+        <div class="side-section__label">Filters</div>
+        <div class="side-search">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="color: var(--text-tertiary);"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+          <input type="text" placeholder="search name/ip…" x-model="search">
+        </div>
+
+        <div class="filter-group">
+          <div class="side-section__label" style="padding: var(--s-2) var(--s-2) var(--s-1);">Type</div>
+          <template x-for="t in ['known','nanite']" :key="t">
+            <label class="filter-row" :class="{'is-checked': isFilterChecked('type', t)}" @click.prevent="toggleFilter('type', t)">
+              <input type="checkbox" :checked="isFilterChecked('type', t)">
+              <span style="text-transform: capitalize;" x-text="t"></span>
+              <span class="mono" x-text="filterCount('type', t)"></span>
+            </label>
+          </template>
+        </div>
+
+        <div class="filter-group">
+          <div class="side-section__label" style="padding: var(--s-2) var(--s-2) var(--s-1);">Status</div>
+          <template x-for="s in ['online','announced','installing','offline']" :key="s">
+            <label class="filter-row" :class="{'is-checked': isFilterChecked('status', s)}" @click.prevent="toggleFilter('status', s)">
+              <input type="checkbox" :checked="isFilterChecked('status', s)">
+              <span style="text-transform: capitalize;" x-text="s"></span>
+              <span class="mono" x-text="filterCount('status', s)"></span>
+            </label>
+          </template>
+        </div>
+      </div>
+    </aside>
+
+    <!-- MAIN -->
+    <main class="main">
+
+      <template x-if="!connected">
+        <div class="banner banner--error">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4m0 4h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/></svg>
+          <span class="banner__msg">SSE disconnected — reconnecting</span>
+          <span class="spacer"></span>
+        </div>
+      </template>
+
+      <template x-if="error">
+        <div class="banner banner--error">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+          <span class="banner__msg" x-text="error"></span>
+          <span class="spacer"></span>
+          <button class="btn btn--ghost" @click="error = null">Dismiss</button>
+        </div>
+      </template>
+
+      <div class="module__head">
+        <h1 class="module__title">Fleet</h1>
+        <span class="module__sub" x-show="data">
+          <span class="num" x-text="data?.counts?.total ?? 0"></span> total ·
+          <span class="num" x-text="data?.counts?.online ?? 0"></span> online ·
+          <span class="num" x-text="data?.counts?.announced ?? 0"></span> announced ·
+          <span class="num" x-text="data?.counts?.installing ?? 0"></span> installing ·
+          <span class="num" x-text="data?.counts?.offline ?? 0"></span> offline
+        </span>
+        <div class="module__actions">
+          <button class="btn btn--ghost" @click="load()" :disabled="loading">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 12a9 9 0 0 1 15-6.7L21 8M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16M3 21v-5h5"/></svg>
+            <span x-text="loading ? 'Loading…' : 'Refresh'"></span>
+          </button>
+        </div>
+      </div>
+
+      <div class="module__body">
+        <div class="queue">
+          <template x-for="item in filteredItems" :key="item.id">
+            <article class="card" :data-fleet-status="item.status">
+              <header class="card__head">
+                <span class="dot" :class="'fleet-dot--' + item.status"></span>
+                <span class="auth-id" x-text="item.display_name || item.name"></span>
+                <span class="card__kind" x-text="item.type"></span>
+                <span class="mono" x-text="item.ip || '—'"></span>
+                <span class="spacer"></span>
+                <span class="mono" style="color: var(--text-tertiary);" x-text="item.status"></span>
+              </header>
+              <div class="card__meta">
+                <span x-show="item.os_type" x-text="item.os_type"></span>
+                <span x-show="item.role" class="sep">·</span>
+                <span x-show="item.role" x-text="item.role"></span>
+                <span x-show="item.arch" class="sep">·</span>
+                <span x-show="item.arch" x-text="'arch ' + item.arch"></span>
+                <span x-show="item.uefi !== undefined" class="sep">·</span>
+                <span x-show="item.uefi !== undefined" x-text="'uefi ' + (item.uefi ? 'yes' : 'no')"></span>
+              </div>
+              <div class="card__op" x-show="item.hw_summary" x-text="item.hw_summary || ''"></div>
+              <footer class="card__foot">
+                <span class="spacer"></span>
+                <button x-show="item.status === 'online'" class="btn btn--ghost" @click="talkTo(item)">Talk</button>
+                <button x-show="item.status === 'announced'" class="btn btn--primary" @click="installNanite(item)">Install</button>
+                <span x-show="item.status === 'installing'" class="mono" style="color: var(--accent);">installing…</span>
+                <button class="btn btn--danger" @click="deleteItem(item)" title="Remove from fleet">
+                  <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                  Remove
+                </button>
+              </footer>
+            </article>
+          </template>
+          <template x-if="data && filteredItems.length === 0">
+            <div class="empty">
+              <div class="empty__inner">
+                <img class="empty__mark" src="/ui/v2/static/brand/mark-mono-amber.svg" alt="">
+                <h2 class="empty__title">No matches</h2>
+                <div class="empty__sub" x-show="(data.fleet || []).length === 0">No fleet items yet.</div>
+                <div class="empty__sub" x-show="(data.fleet || []).length > 0">No items match the current filters.</div>
+              </div>
+            </div>
+          </template>
+          <template x-if="!data && loading">
+            <div class="empty">
+              <div class="empty__inner">
+                <div class="empty__sub">Loading fleet…</div>
+              </div>
+            </div>
+          </template>
+        </div>
+      </div>
+    </main>
+
+    <!-- RAIL (Now) -->
+    <aside class="rail">
+      <div class="rail__head">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="color: var(--accent);"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+        <span class="rail__title">Now</span>
+        <span class="spacer" style="flex: 1;"></span>
+        <span class="dot" :class="connected ? 'dot--ok dot--pulse' : 'dot--error'"></span>
+        <span class="mono" style="color: var(--text-tertiary); font-size: var(--fs-11);" x-text="connected ? 'live' : 'paused'"></span>
+      </div>
+      <div class="rail__body">
+        <template x-for="item in feed" :key="item.uid">
+          <div class="feed-item" :class="'feed-item--' + item.kind">
+            <span class="feed-item__time" x-text="item.t"></span>
+            <div class="feed-item__body">
+              <div class="feed-item__title" x-text="item.title"></div>
+              <div class="feed-item__sub" x-text="item.sub"></div>
+            </div>
+          </div>
+        </template>
+        <template x-if="feed.length === 0">
+          <div style="padding: var(--s-3); color: var(--text-tertiary); font-size: var(--fs-12);">waiting for events…</div>
+        </template>
+      </div>
+    </aside>
+
+    <!-- STATUSBAR -->
+    <footer class="statusbar">
+      <span class="seg-group"><span class="dot dot--ok"></span><span class="label">fleet:</span><span x-text="data ? (data.counts?.online ?? 0) + '/' + (data.counts?.total ?? 0) : '…'"></span></span>
+      <span class="seg-group"><span class="dot" :class="connected ? 'dot--ok' : 'dot--error'"></span><span class="label">sse:</span><span x-text="connected ? 'live' : 'down'"></span></span>
+      <span class="seg-group"><span class="label">last:</span><span x-text="lastLoadedRel()"></span></span>
+      <span class="spacer"></span>
+      <span class="label">argos v0.7.0 · ui v2 · fleet</span>
+    </footer>
+
+  </div>
+
+  <!-- COMMAND PALETTE -->
+  <template x-if="paletteOpen">
+    <div class="palette-backdrop" @click.self="closePalette()">
+      <div class="palette" role="dialog">
+        <input x-model="paletteQuery" @keydown.escape.stop="closePalette()" class="palette__input" type="text" autofocus placeholder="Search or run command…">
+        <template x-for="(a, i) in paletteResults" :key="i">
+          <div class="palette__item" :class="{'is-active': i === paletteSelectedIdx}" @click="runPaletteAction(i)">
+            <span x-text="a.label"></span>
+            <span class="spacer"></span>
+            <span class="meta" x-text="a.hint"></span>
+          </div>
+        </template>
+        <div class="palette__foot">
+          <span class="hint"><span class="kbd">↑↓</span> navigate</span>
+          <span class="hint"><span class="kbd">⏎</span> run</span>
+          <span class="hint"><span class="kbd">esc</span> close</span>
+          <span class="spacer" style="flex:1;"></span>
+          <span class="mono" style="color: var(--text-disabled);" x-text="paletteResults.length + ' matches'"></span>
+        </div>
+      </div>
+    </div>
+  </template>
+
+</div>
+
+<script src="https://unpkg.com/alpinejs@3.14.1/dist/cdn.min.js" defer></script>
+<script>
+function app() {
+  return {
+    // --- core ---
+    data: null,
+    loading: false,
+    error: null,
+    search: '',
+    activeFilters: { type: [], status: [] },
+    lastLoadedAt: null,
+
+    // --- shell ---
+    connected: false,
+    _reconnectDelay: 1000,
+    _reconnectTimer: null,
+    _es: null,
+
+    // --- palette ---
+    paletteOpen: false,
+    paletteQuery: '',
+    paletteSelectedIdx: 0,
+
+    // --- now feed ---
+    feed: [],
+    _feedSeq: 0,
+
+    init() {
+      window.addEventListener('keydown', (e) => this.onGlobalKey(e));
+      this.$watch('paletteQuery', () => { this.paletteSelectedIdx = 0; });
+      this.load();
+      this.connectStream();
+    },
+
+    // ===== Fleet data =====
+    async load() {
+      this.loading = true;
+      this.error = null;
+      try {
+        const r = await fetch('/api/fleet');
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        this.data = await r.json();
+        this.lastLoadedAt = Date.now();
+      } catch (e) {
+        this.error = 'fleet load failed: ' + e.message;
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    get filteredItems() {
+      let list = this.data?.fleet || [];
+      const f = this.activeFilters;
+      if (f.type.length > 0) list = list.filter(x => f.type.includes(x.type));
+      if (f.status.length > 0) list = list.filter(x => f.status.includes(x.status));
+      const s = this.search.toLowerCase().trim();
+      if (s) list = list.filter(x =>
+        (x.name || '').toLowerCase().indexOf(s) >= 0 ||
+        (x.display_name || '').toLowerCase().indexOf(s) >= 0 ||
+        (x.ip || '').indexOf(s) >= 0
+      );
+      return list;
+    },
+
+    moduleSubtitle() {
+      if (!this.data) return 'loading…';
+      const c = this.data.counts || {};
+      const total = c.total ?? 0;
+      const online = c.online ?? 0;
+      return online + '/' + total + ' online';
+    },
+
+    isFilterChecked(cat, val) { return this.activeFilters[cat].includes(val); },
+    toggleFilter(cat, val) {
+      const arr = this.activeFilters[cat];
+      const idx = arr.indexOf(val);
+      if (idx === -1) arr.push(val); else arr.splice(idx, 1);
+    },
+    filterCount(cat, val) {
+      const list = this.data?.fleet || [];
+      if (cat === 'type')   return list.filter(x => x.type === val).length;
+      if (cat === 'status') return list.filter(x => x.status === val).length;
+      return 0;
+    },
+
+    lastLoadedRel() {
+      if (!this.lastLoadedAt) return '—';
+      const dt = (Date.now() - this.lastLoadedAt) / 1000;
+      if (dt < 5)    return 'just now';
+      if (dt < 60)   return Math.floor(dt) + 's ago';
+      if (dt < 3600) return Math.floor(dt / 60) + 'm ago';
+      return Math.floor(dt / 3600) + 'h ago';
+    },
+
+    // ===== Actions =====
+    async deleteItem(item) {
+      const name = item.display_name || item.name;
+      if (!confirm('Remove ' + name + ' from fleet?')) return;
+      try {
+        const url = item.type === 'nanite'
+          ? '/api/fleet/nanite/' + (item.node_id || item.name)
+          : '/api/fleet/known/' + item.raw_id;
+        const r = await fetch(url, { method: 'DELETE' });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        await this.load();
+      } catch (e) {
+        this.error = 'remove failed: ' + e.message;
+      }
+    },
+
+    async installNanite(item) {
+      const title = (item.display_name || item.name) + ' @ ' + (item.ip || 'unknown');
+      let msg = 'Nanite ' + (item.node_id || item.name) + ' anuntat la ' + (item.ip || '?') + '.\n';
+      msg += 'Hardware: ' + (item.hw_summary || 'necunoscut') + '\n';
+      msg += 'Arch: ' + (item.arch || '?') + ', UEFI: ' + (item.uefi ? 'da' : 'nu') + '\n\n';
+      msg += 'Ce sistem vrei sa instalez pe aceasta masina?';
+      try {
+        const r = await fetch('/api/conversations', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title })
+        });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const conv = await r.json();
+        await fetch('/api/messages', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ conversation_id: conv.id, content: msg })
+        });
+        alert('Conversatie #' + conv.id + ' creata. Mergi in Chats.');
+      } catch (e) {
+        this.error = 'install failed: ' + e.message;
+      }
+    },
+
+    async talkTo(item) {
+      const title = (item.display_name || item.name) + ' @ ' + (item.ip || 'unknown');
+      let msg = 'Vreau sa lucrez pe ' + (item.display_name || item.name);
+      msg += ' (' + (item.ip || '?') + ', ' + (item.os_type || '?') + ').';
+      try {
+        const r = await fetch('/api/conversations', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title })
+        });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const conv = await r.json();
+        await fetch('/api/messages', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ conversation_id: conv.id, content: msg })
+        });
+        alert('Conversatie #' + conv.id + ' creata. Mergi in Chats.');
+      } catch (e) {
+        this.error = 'talk failed: ' + e.message;
+      }
+    },
+
+    // ===== SSE / Now feed =====
+    connectStream() {
+      if (this._reconnectTimer) {
+        clearTimeout(this._reconnectTimer);
+        this._reconnectTimer = null;
+      }
+      if (this._es) { try { this._es.close(); } catch (e) {} }
+      this._es = new EventSource('/api/stream/activity');
+
+      this._es.onopen = () => {
+        this.connected = true;
+        this._reconnectDelay = 1000;
+      };
+      this._es.onerror = () => {
+        if (this._reconnectTimer) return;
+        this.connected = false;
+        try { this._es.close(); } catch (e) {}
+        const base = this._reconnectDelay;
+        const jitter = base * (0.8 + Math.random() * 0.4);
+        this._reconnectDelay = Math.min(base * 2, 30000);
+        this._reconnectTimer = setTimeout(() => {
+          this._reconnectTimer = null;
+          this.connectStream();
+        }, jitter);
+      };
+      this._es.addEventListener('hello', (e) => {
+        this.connected = true;
+        this.pushFeed('info', 'stream connected', '');
+      });
+      this._es.addEventListener('heartbeat', (e) => {
+        try {
+          const d = JSON.parse(e.data);
+          const cpu = d.cpu_pct >= 0 ? d.cpu_pct.toFixed(0) + '%' : '?';
+          this.pushFeed('info', d.node + '/' + d.service, 'cpu ' + cpu + ' · ' + d.status, d.ts);
+        } catch (err) {}
+      });
+      this._es.addEventListener('auth_pending', (e) => {
+        try {
+          const d = JSON.parse(e.data);
+          this.pushFeed('pending', 'auth_pending #' + d.id, (d.operation || '').slice(0, 60));
+        } catch (err) {}
+      });
+      this._es.addEventListener('auth_decided', (e) => {
+        try {
+          const d = JSON.parse(e.data);
+          this.pushFeed(d.decision === 'approved' ? 'approved' : 'denied',
+                        'auth_decided #' + d.id, d.decision || '');
+        } catch (err) {}
+      });
+    },
+
+    pushFeed(kind, title, sub, ts) {
+      this._feedSeq++;
+      const t = ts ? new Date(ts) : new Date();
+      const tShort = t.toTimeString().slice(0, 5);
+      this.feed.unshift({ uid: this._feedSeq, kind, title, sub, t: tShort });
+      if (this.feed.length > 50) this.feed.length = 50;
+    },
+
+    // ===== Palette =====
+    openPalette() {
+      this.paletteOpen = true;
+      this.paletteQuery = '';
+      this.paletteSelectedIdx = 0;
+    },
+    closePalette() {
+      this.paletteOpen = false;
+      this.paletteQuery = '';
+    },
+    runPaletteAction(idx) {
+      const r = this.paletteResults;
+      if (idx < 0 || idx >= r.length) return;
+      const a = r[idx];
+      this.closePalette();
+      this.$nextTick(() => a.run());
+    },
+    get paletteActions() {
+      return [
+        { label: 'Refresh fleet',    hint: 'reload /api/fleet',                run: () => this.load() },
+        { label: 'Filter: online',   hint: 'show only online',                 run: () => { this.activeFilters.status = ['online']; this.activeFilters.type = []; }},
+        { label: 'Filter: announced',hint: 'show only announced',              run: () => { this.activeFilters.status = ['announced']; this.activeFilters.type = []; }},
+        { label: 'Filter: nanite',   hint: 'show only nanite type',            run: () => { this.activeFilters.type = ['nanite']; this.activeFilters.status = []; }},
+        { label: 'Clear filters',    hint: 'reset type and status filters',    run: () => { this.activeFilters.type = []; this.activeFilters.status = []; this.search = ''; }},
+        { label: 'Open Approvals',   hint: 'navigate to approvals module',     run: () => location.href = '../approvals/index.html' },
+        { label: 'Open Health',      hint: 'navigate to health module',        run: () => location.href = '../health/index.html' },
+        { label: 'Open Jobs',        hint: 'navigate to jobs module',          run: () => location.href = '../jobs/index.html' }
+      ];
+    },
+    get paletteResults() {
+      const q = this.paletteQuery.trim().toLowerCase();
+      if (!q) return this.paletteActions;
+      return this.paletteActions.filter(a => a.label.toLowerCase().includes(q) || a.hint.toLowerCase().includes(q));
+    },
+
+    // ===== Keyboard =====
+    _isTypingTarget(evt) {
+      const t = evt.target;
+      return t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
+    },
+    onGlobalKey(evt) {
+      const k = evt.key;
+      if ((evt.ctrlKey || evt.metaKey) && (k === 'k' || k === 'K')) {
+        this.openPalette(); evt.preventDefault(); return;
+      }
+      if (this.paletteOpen) {
+        if (k === 'Escape')    { this.closePalette(); evt.preventDefault(); return; }
+        if (k === 'Enter')     { this.runPaletteAction(this.paletteSelectedIdx); evt.preventDefault(); return; }
+        if (k === 'ArrowDown') { this.paletteSelectedIdx = Math.min(this.paletteSelectedIdx + 1, this.paletteResults.length - 1); evt.preventDefault(); return; }
+        if (k === 'ArrowUp')   { this.paletteSelectedIdx = Math.max(this.paletteSelectedIdx - 1, 0); evt.preventDefault(); return; }
+        return;
+      }
+      if (this._isTypingTarget(evt)) return;
+      if (k === 'r' || k === 'R') { this.load(); evt.preventDefault(); }
+    }
+  };
+}
+</script>
+</body>
+</html>

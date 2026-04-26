@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1440">
+<title>ARGOS — Chats</title>
+
+<link rel="icon" href="/favicon.ico" type="image/x-icon">
+<link rel="stylesheet" href="../../static/tokens.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div x-data="app()" x-cloak>
+
+  <div class="shell">
+
+    <header class="topbar">
+      <a class="topbar__brand" href="../../../index.html">
+        <img src="/ui/v2/static/brand/mark-full-color.svg" alt="">
+        <span class="topbar__wordmark">ARGOS</span>
+      </a>
+      <span class="topbar__divider"></span>
+      <div class="topbar__module">
+        <span>Chats</span>
+        <span class="crumb-sep">/</span>
+        <strong x-text="moduleSubtitle()"></strong>
+      </div>
+
+      <div class="topbar__search" @click="openPalette()">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+        <span>Search or run command</span>
+        <span class="kbd">⌘K</span>
+      </div>
+
+      <div class="topbar__right">
+        <div class="topbar__conn">
+          <span class="dot" :class="connected ? 'dot--ok' : 'dot--error dot--pulse'"></span>
+          <span x-text="connected ? 'live' : 'reconnecting'"></span>
+        </div>
+        <div class="topbar__user" title="operator@hermes">op</div>
+      </div>
+    </header>
+
+    <aside class="sidebar">
+      <div class="side-section">
+        <div class="side-section__label">Modules</div>
+        <a class="nav-item" href="../approvals/index.html"><span class="nav-item__icon"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 7h18M3 12h18M3 17h12"/></svg></span>Approvals<span class="nav-item__shortcut">g a</span></a>
+        <a class="nav-item" href="../fleet/index.html"><span class="nav-item__icon"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg></span>Fleet<span class="nav-item__shortcut">g f</span></a>
+        <a class="nav-item" href="../jobs/index.html"><span class="nav-item__icon"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M8 5v14l11-7z"/></svg></span>Jobs<span class="nav-item__shortcut">g j</span></a>
+        <a class="nav-item" href="../health/index.html"><span class="nav-item__icon"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 12h-4l-3 9-6-18-3 9H2"/></svg></span>Health<span class="nav-item__shortcut">g h</span></a>
+        <a class="nav-item is-active" href="./index.html"><span class="nav-item__icon"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>Chat<span class="nav-item__count num" x-text="conversations.length"></span></a>
+        <a class="nav-item" href="../reasoning/index.html"><span class="nav-item__icon"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>Reasoning<span class="nav-item__shortcut">g r</span></a>
+        <a class="nav-item" href="../settings/index.html"><span class="nav-item__icon"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="3"/></svg></span>Settings<span class="nav-item__shortcut">g s</span></a>
+      </div>
+
+      <div class="side-section">
+        <div class="side-section__label">Filters</div>
+        <div class="side-search">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="color: var(--text-tertiary);"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+          <input type="text" placeholder="search conversations…" x-model="search">
+        </div>
+        <div class="filter-group">
+          <label class="filter-row" :class="{'is-checked': showArchived}" @click.prevent="showArchived = !showArchived">
+            <input type="checkbox" :checked="showArchived">
+            <span>Show archived</span>
+            <span class="mono" x-text="archives.length"></span>
+          </label>
+        </div>
+      </div>
+    </aside>
+
+    <main class="main">
+
+      <template x-if="!connected">
+        <div class="banner banner--error">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4m0 4h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/></svg>
+          <span class="banner__msg">SSE disconnected — reconnecting</span>
+          <span class="spacer"></span>
+        </div>
+      </template>
+
+      <template x-if="error">
+        <div class="banner banner--error">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+          <span class="banner__msg" x-text="error"></span>
+          <span class="spacer"></span>
+          <button class="btn btn--ghost" @click="error = null">Dismiss</button>
+        </div>
+      </template>
+
+      <div class="module__head">
+        <h1 class="module__title">Chats</h1>
+        <span class="module__sub" x-show="!loading">
+          <span class="num" x-text="conversations.length"></span> active ·
+          <span class="num" x-text="archives.length"></span> archived
+        </span>
+        <div class="module__actions">
+          <button class="btn btn--primary" @click="newConv()">+ New conv</button>
+          <button class="btn btn--ghost" @click="load()" :disabled="loading">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 12a9 9 0 0 1 15-6.7L21 8M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16M3 21v-5h5"/></svg>
+            <span x-text="loading ? 'Loading…' : 'Refresh'"></span>
+          </button>
+        </div>
+      </div>
+
+      <div class="module__body chats-split">
+
+        <!-- LIST PANE -->
+        <div class="chats-list-pane">
+          <div class="chats-section">
+            <div class="section-label" style="padding: var(--s-3) var(--s-4) var(--s-2);">— ACTIVE —</div>
+            <template x-for="c in filteredActive" :key="'c:' + c.id">
+              <div class="chat-item" :class="{'is-selected': selectedConvId === c.id}" @click="selectConv(c.id)">
+                <span class="chat-item__icon">💬</span>
+                <div class="chat-item__body">
+                  <div class="chat-item__title">
+                    <span x-show="c.id === 1" class="risk risk--low" style="font-size: 9px;">Instant</span>
+                    <span x-show="c.id !== 1" class="mono auth-id" x-text="'#' + c.id"></span>
+                    <span x-text="c.title"></span>
+                  </div>
+                  <div class="chat-item__meta">
+                    <span class="mono" x-text="c.id === 1 ? 'scratch' : 'chat'"></span>
+                    <span class="sep">·</span>
+                    <span x-text="formatRel(c.updated_at)"></span>
+                  </div>
+                </div>
+                <button x-show="c.id === 1" class="btn btn--icon" @click.stop="clearInstant()" title="Clear">
+                  <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+                </button>
+                <button x-show="c.id !== 1" class="btn btn--icon" @click.stop="deleteConv(c.id)" title="Delete">
+                  <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                </button>
+              </div>
+            </template>
+            <div x-show="filteredActive.length === 0" style="padding: var(--s-3) var(--s-4); color: var(--text-tertiary); font-size: var(--fs-12);">
+              no active conversations
+            </div>
+          </div>
+
+          <div class="chats-section" x-show="showArchived">
+            <div class="section-label" style="padding: var(--s-3) var(--s-4) var(--s-2);">— ARCHIVED —</div>
+            <template x-for="a in filteredArchived" :key="'a:' + a.id">
+              <div class="chat-item">
+                <span class="chat-item__icon">📦</span>
+                <div class="chat-item__body">
+                  <div class="chat-item__title">
+                    <span class="mono auth-id" x-text="'#' + a.id"></span>
+                    <span x-text="a.title"></span>
+                  </div>
+                  <div class="chat-item__meta">
+                    <span>archived</span><span class="sep">·</span>
+                    <span x-text="formatRel(a.created_at)"></span>
+                    <template x-for="t in (a.tags || [])" :key="t">
+                      <span class="card__kind" style="font-size: 10px;" x-text="t"></span>
+                    </template>
+                  </div>
+                </div>
+              </div>
+            </template>
+            <div x-show="filteredArchived.length === 0" style="padding: var(--s-3) var(--s-4); color: var(--text-tertiary); font-size: var(--fs-12);">
+              no archived conversations
+            </div>
+          </div>
+        </div>
+
+        <!-- VIEW PANE -->
+        <div class="chats-view-pane">
+          <template x-if="!selectedConvId">
+            <div class="empty">
+              <div class="empty__inner">
+                <img class="empty__mark" src="/ui/v2/static/brand/mark-mono-amber.svg" alt="">
+                <h2 class="empty__title">Select a conversation</h2>
+                <div class="empty__sub">Pick from the list on the left.</div>
+              </div>
+            </div>
+          </template>
+          <template x-if="selectedConvId">
+            <div class="chat-view" x-data="chatView()" x-init="init()" :data-conv-id="$root.selectedConvId" :key="$root.selectedConvId">
+              <header class="chat-view-header">
+                <span class="mono auth-id" x-text="'#' + convId"></span>
+                <span class="mono" style="color: var(--text-secondary);" x-text="loading ? 'loading…' : (messages.length + ' messages')"></span>
+                <span class="spacer" style="flex: 1;"></span>
+                <button class="btn btn--icon" @click="refresh()" title="Refresh">
+                  <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 12a9 9 0 0 1 15-6.7L21 8M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16M3 21v-5h5"/></svg>
+                </button>
+              </header>
+              <div class="chat-messages" x-ref="msgContainer">
+                <template x-if="loading && messages.length === 0">
+                  <div style="padding: var(--s-4); color: var(--text-secondary);">Loading messages…</div>
+                </template>
+                <template x-if="!loading && messages.length === 0">
+                  <div style="padding: var(--s-4); color: var(--text-tertiary);">No messages yet.</div>
+                </template>
+                <template x-for="msg in messages" :key="msg.id">
+                  <div class="chat-msg" :class="'chat-msg--' + msg.role">
+                    <div class="chat-msg__meta">
+                      <span class="mono" x-text="msg.role"></span>
+                      <span class="mono" style="color: var(--text-tertiary);" x-text="formatTs(msg.created_at)"></span>
+                    </div>
+                    <div class="chat-msg__content" x-html="renderMd(msg.content)"></div>
+                  </div>
+                </template>
+                <template x-if="pendingSpinner">
+                  <div class="chat-msg chat-msg--assistant chat-msg--pending">
+                    <div class="chat-msg__meta"><span class="mono">assistant</span></div>
+                    <div class="chat-msg__content"><span class="mono">ARGOS lucreaza<span class="dot dot--pulse" style="display: inline-block; margin-left: 6px;"></span></span></div>
+                  </div>
+                </template>
+              </div>
+              <footer class="chat-input-area">
+                <textarea x-model="draft" placeholder="Scrie un mesaj… (Enter trimite, Shift+Enter rand nou)"
+                  @keydown.enter.prevent="if(!$event.shiftKey) send()"
+                  :disabled="sending" rows="2"></textarea>
+                <div class="chat-input-bar">
+                  <span class="mono" style="color: var(--text-tertiary); font-size: var(--fs-11);" x-text="draft.length + ' chars'"></span>
+                  <span class="spacer" style="flex: 1;"></span>
+                  <button class="btn btn--primary" @click="send()" :disabled="sending || !draft.trim()">
+                    <span x-text="sending ? 'Sending…' : 'Send'"></span>
+                  </button>
+                </div>
+              </footer>
+            </div>
+          </template>
+        </div>
+
+      </div>
+    </main>
+
+    <aside class="rail">
+      <div class="rail__head">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="color: var(--accent);"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+        <span class="rail__title">Now</span>
+        <span class="spacer" style="flex: 1;"></span>
+        <span class="dot" :class="connected ? 'dot--ok dot--pulse' : 'dot--error'"></span>
+        <span class="mono" style="color: var(--text-tertiary); font-size: var(--fs-11);" x-text="connected ? 'live' : 'paused'"></span>
+      </div>
+      <div class="rail__body">
+        <template x-for="item in feed" :key="item.uid">
+          <div class="feed-item" :class="'feed-item--' + item.kind">
+            <span class="feed-item__time" x-text="item.t"></span>
+            <div class="feed-item__body">
+              <div class="feed-item__title" x-text="item.title"></div>
+              <div class="feed-item__sub" x-text="item.sub"></div>
+            </div>
+          </div>
+        </template>
+        <template x-if="feed.length === 0">
+          <div style="padding: var(--s-3); color: var(--text-tertiary); font-size: var(--fs-12);">waiting for events…</div>
+        </template>
+      </div>
+    </aside>
+
+    <footer class="statusbar">
+      <span class="seg-group"><span class="dot dot--ok"></span><span class="label">conv:</span><span x-text="conversations.length + '/' + (conversations.length + archives.length)"></span></span>
+      <span class="seg-group"><span class="dot" :class="connected ? 'dot--ok' : 'dot--error'"></span><span class="label">sse:</span><span x-text="connected ? 'live' : 'down'"></span></span>
+      <span class="seg-group"><span class="label">selected:</span><span x-text="selectedConvId ? '#' + selectedConvId : '—'"></span></span>
+      <span class="spacer"></span>
+      <span class="label">argos v0.7.0 · ui v2 · chats</span>
+    </footer>
+
+  </div>
+
+  <template x-if="paletteOpen">
+    <div class="palette-backdrop" @click.self="closePalette()">
+      <div class="palette" role="dialog">
+        <input x-model="paletteQuery" @keydown.escape.stop="closePalette()" class="palette__input" type="text" autofocus placeholder="Search or run command…">
+        <template x-for="(a, i) in paletteResults" :key="i">
+          <div class="palette__item" :class="{'is-active': i === paletteSelectedIdx}" @click="runPaletteAction(i)">
+            <span x-text="a.label"></span><span class="spacer"></span><span class="meta" x-text="a.hint"></span>
+          </div>
+        </template>
+        <div class="palette__foot">
+          <span class="hint"><span class="kbd">↑↓</span> navigate</span>
+          <span class="hint"><span class="kbd">⏎</span> run</span>
+          <span class="hint"><span class="kbd">esc</span> close</span>
+          <span class="spacer" style="flex:1;"></span>
+          <span class="mono" style="color: var(--text-disabled);" x-text="paletteResults.length + ' matches'"></span>
+        </div>
+      </div>
+    </div>
+  </template>
+
+</div>
+
+<script src="https://unpkg.com/alpinejs@3.14.1/dist/cdn.min.js" defer></script>
+<script>
+function redactSecrets(text) {
+  if (!text || typeof text !== 'string') return text;
+  const REDACTED = '••••••';
+  const patterns = [
+    /sk-ant-[A-Za-z0-9_-]{40,}/g,
+    /sk-(?!ant-)[A-Za-z0-9]{20,}/g,
+    /gh[psour]_[A-Za-z0-9]{36,}/g,
+    /xai-[A-Za-z0-9]{20,}/g,
+    /AIza[0-9A-Za-z_-]{35}/g,
+    /AKIA[0-9A-Z]{16}/g,
+    /aws_secret[_a-z]*\s*[=:]\s*['"]?[A-Za-z0-9/+=]{40}['"]?/gi,
+    /eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/g,
+    /Bearer\s+[A-Za-z0-9_\-.=]{20,}/g,
+    /xox[baprs]-[A-Za-z0-9-]{10,}/g,
+    /(?:sk|pk|rk)_(?:live|test)_[A-Za-z0-9]{24,}/g,
+    /SG\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43}/g,
+    /(?:password|passwd|pwd|secret|token|api[_-]?key|access[_-]?key|auth[_-]?token|client[_-]?secret|private[_-]?key)\s*[:=]\s*['"]?([^\s'"]{6,})['"]?/gi,
+    /\b[A-Za-z][A-Za-z0-9]{2,}@\d{3,}\b/g,
+    /-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY-----/g,
+    /\b[a-f0-9]{32,}\b/g,
+    /\b(?=[A-Za-z0-9+/]*[A-Z])(?=[A-Za-z0-9+/]*[a-z])(?=[A-Za-z0-9+/]*\d)[A-Za-z0-9+/]{40,}={0,2}\b/g,
+  ];
+  let result = text;
+  for (const re of patterns) result = result.replace(re, REDACTED);
+  return result;
+}
+
+function chatView() {
+  return {
+    convId: null,
+    messages: [],
+    draft: '',
+    loading: true,
+    sending: false,
+    pendingSpinner: false,
+
+    init() {
+      const idStr = this.$el.getAttribute('data-conv-id');
+      if (idStr) this.convId = parseInt(idStr);
+      if (!this.convId) { this.loading = false; return; }
+      this.loadMessages().then(() => this.checkPending());
+      this.startSSE();
+      this.$el._chatViewCleanup = () => this.stopSSE();
+    },
+    startSSE() {
+      if (this._sse) return;
+      try {
+        this._sse = new EventSource('/api/stream/activity');
+        this._sse.addEventListener('chat_message', (ev) => {
+          try {
+            const data = JSON.parse(ev.data);
+            if (data.conversation_id !== this.convId) return;
+            if (this._refetchTimer) return;
+            this._refetchTimer = setTimeout(() => {
+              this._refetchTimer = null;
+              this.loadMessages().then(() => {
+                const hasAssistant = this.messages.some(m => m.role === 'assistant');
+                if (hasAssistant) this.pendingSpinner = false;
+              });
+            }, 500);
+          } catch (e) {}
+        });
+      } catch (e) {}
+    },
+    stopSSE() {
+      if (this._sse) { this._sse.close(); this._sse = null; }
+      if (this._refetchTimer) { clearTimeout(this._refetchTimer); this._refetchTimer = null; }
+    },
+    async checkPending() {
+      try {
+        const r = await fetch('/api/conversations/' + this.convId + '/pending');
+        if (!r.ok) return;
+        const data = await r.json();
+        if (data.pending) {
+          const alreadyShown = this.messages.some(m => m.role === 'user' && m.content === data.content);
+          if (!alreadyShown) {
+            this.messages.push({ id: 'pending-' + Date.now(), role: 'user', content: data.content, created_at: new Date().toISOString() });
+          }
+          this.pendingSpinner = true;
+          this.$nextTick(() => this.scrollBottom());
+        }
+      } catch (e) {}
+    },
+    async loadMessages() {
+      this.loading = true;
+      try {
+        const r = await fetch('/api/conversations/' + this.convId + '/messages');
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        this.messages = await r.json();
+        this.$nextTick(() => this.scrollBottom());
+      } catch (e) { console.error(e); }
+      finally { this.loading = false; }
+    },
+    async refresh() { this.pendingSpinner = false; await this.loadMessages(); await this.checkPending(); },
+    async send() {
+      const content = this.draft.trim();
+      if (!content || this.sending) return;
+      this.sending = true;
+      this.pendingSpinner = true;
+      this.messages.push({ id: 'tmp-' + Date.now(), role: 'user', content, created_at: new Date().toISOString() });
+      this.draft = '';
+      this.$nextTick(() => this.scrollBottom());
+      try {
+        const r = await fetch('/api/messages', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ conversation_id: this.convId, content })
+        });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        await this.loadMessages();
+      } catch (e) {
+        alert('Send failed: ' + e.message);
+      } finally { this.sending = false; this.pendingSpinner = false; }
+    },
+    scrollBottom() {
+      const c = this.$refs.msgContainer;
+      if (c) c.scrollTop = c.scrollHeight;
+    },
+    renderMd(text) {
+      if (!text) return '';
+      let s = (window.redactSecrets ? window.redactSecrets(text) : text);
+      s = s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+      s = s.replace(/```(\w*)\n([\s\S]*?)```/g, (m, lang, code) => '<pre class="json"><code>' + code.replace(/\n$/, '') + '</code></pre>');
+      s = s.replace(/`([^`\n]+)`/g, '<code class="mono" style="background: var(--bg-sunken); padding: 1px 4px; border-radius: 3px;">$1</code>');
+      s = s.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
+      s = s.replace(/(?<!\*)\*([^*\n]+)\*(?!\*)/g, '<em>$1</em>');
+      s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+      s = s.replace(/\n\n+/g, '</p><p>');
+      s = s.replace(/\n/g, '<br>');
+      return '<p>' + s + '</p>';
+    },
+    formatTs(ts) {
+      if (!ts) return '';
+      try { return new Date(ts).toLocaleTimeString('ro-RO', { hour: '2-digit', minute: '2-digit' }); }
+      catch { return ''; }
+    }
+  };
+}
+window.redactSecrets = redactSecrets;
+window.chatView = chatView;
+
+function app() {
+  return {
+    conversations: [], archives: [], filter: 'all', showArchived: false, search: '',
+    loading: false, error: null, selectedConvId: null,
+    connected: false, _reconnectDelay: 1000, _reconnectTimer: null, _es: null,
+    paletteOpen: false, paletteQuery: '', paletteSelectedIdx: 0,
+    feed: [], _feedSeq: 0,
+
+    init() {
+      window.addEventListener('keydown', (e) => this.onGlobalKey(e));
+      this.$watch('paletteQuery', () => { this.paletteSelectedIdx = 0; });
+      this.load();
+      this.connectStream();
+    },
+
+    async load() {
+      this.loading = true; this.error = null;
+      try {
+        const [rc, ra] = await Promise.all([
+          fetch('/api/conversations').then(r => r.ok ? r.json() : Promise.reject('HTTP ' + r.status)),
+          fetch('/api/archives').then(r => r.ok ? r.json() : Promise.reject('HTTP ' + r.status)),
+        ]);
+        this.conversations = Array.isArray(rc) ? rc : (rc.conversations || []);
+        this.archives = Array.isArray(ra) ? ra : (ra.archives || []);
+      } catch (e) { this.error = 'load failed: ' + e; }
+      finally { this.loading = false; }
+    },
+
+    get filteredActive() {
+      let list = this.conversations;
+      const s = this.search.toLowerCase().trim();
+      if (s) list = list.filter(c => (c.title || '').toLowerCase().includes(s) || String(c.id).includes(s));
+      return list.slice().sort((a, b) => {
+        if (a.id === 1) return -1;
+        if (b.id === 1) return 1;
+        return (b.updated_at || '').localeCompare(a.updated_at || '');
+      });
+    },
+    get filteredArchived() {
+      let list = this.archives;
+      const s = this.search.toLowerCase().trim();
+      if (s) list = list.filter(a => (a.title || '').toLowerCase().includes(s));
+      return list;
+    },
+
+    selectConv(id) { this.selectedConvId = id; },
+
+    async newConv() {
+      const title = prompt('New conversation title:');
+      if (!title || !title.trim()) return;
+      try {
+        const r = await fetch('/api/conversations', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title: title.trim() })
+        });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const data = await r.json();
+        await this.load();
+        this.selectConv(data.id);
+      } catch (e) { this.error = 'create failed: ' + e.message; }
+    },
+    async clearInstant() {
+      if (!confirm('Clear all messages from Instant?')) return;
+      try {
+        const r = await fetch('/api/conversations/1/messages', { method: 'DELETE' });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        if (this.selectedConvId === 1) {
+          this.selectedConvId = null;
+          this.$nextTick(() => this.selectedConvId = 1);
+        }
+      } catch (e) { this.error = 'clear failed: ' + e.message; }
+    },
+    async deleteConv(id) {
+      if (!confirm('Delete conversation #' + id + '? All messages will be lost.')) return;
+      try {
+        const r = await fetch('/api/conversations/' + id, { method: 'DELETE' });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        if (this.selectedConvId === id) this.selectedConvId = null;
+        await this.load();
+      } catch (e) { this.error = 'delete failed: ' + e.message; }
+    },
+
+    moduleSubtitle() {
+      if (this.selectedConvId) return '#' + this.selectedConvId;
+      return this.conversations.length + ' active';
+    },
+    formatRel(iso) {
+      if (!iso) return '-';
+      try {
+        const dt = (Date.now() - new Date(iso).getTime()) / 1000;
+        if (dt < 60) return 'now';
+        if (dt < 3600) return Math.floor(dt / 60) + 'm';
+        if (dt < 86400) return Math.floor(dt / 3600) + 'h';
+        return Math.floor(dt / 86400) + 'z';
+      } catch (e) { return iso; }
+    },
+
+    connectStream() {
+      if (this._reconnectTimer) { clearTimeout(this._reconnectTimer); this._reconnectTimer = null; }
+      if (this._es) { try { this._es.close(); } catch (e) {} }
+      this._es = new EventSource('/api/stream/activity');
+      this._es.onopen = () => { this.connected = true; this._reconnectDelay = 1000; };
+      this._es.onerror = () => {
+        if (this._reconnectTimer) return;
+        this.connected = false;
+        try { this._es.close(); } catch (e) {}
+        const base = this._reconnectDelay;
+        const jitter = base * (0.8 + Math.random() * 0.4);
+        this._reconnectDelay = Math.min(base * 2, 30000);
+        this._reconnectTimer = setTimeout(() => { this._reconnectTimer = null; this.connectStream(); }, jitter);
+      };
+      this._es.addEventListener('hello', () => { this.connected = true; this.pushFeed('info', 'stream connected', ''); });
+      this._es.addEventListener('chat_message', (e) => {
+        try { const d = JSON.parse(e.data); this.pushFeed('info', 'chat_message #' + d.conversation_id, (d.content || '').slice(0, 60)); } catch (err) {}
+      });
+    },
+    pushFeed(kind, title, sub, ts) {
+      this._feedSeq++;
+      const t = ts ? new Date(ts) : new Date();
+      this.feed.unshift({ uid: this._feedSeq, kind, title, sub, t: t.toTimeString().slice(0, 5) });
+      if (this.feed.length > 50) this.feed.length = 50;
+    },
+
+    openPalette() { this.paletteOpen = true; this.paletteQuery = ''; this.paletteSelectedIdx = 0; },
+    closePalette() { this.paletteOpen = false; this.paletteQuery = ''; },
+    runPaletteAction(idx) {
+      const r = this.paletteResults;
+      if (idx < 0 || idx >= r.length) return;
+      const a = r[idx];
+      this.closePalette();
+      this.$nextTick(() => a.run());
+    },
+    get paletteActions() {
+      return [
+        { label: 'New conversation', hint: 'create a new chat',                  run: () => this.newConv() },
+        { label: 'Refresh chats',    hint: 'reload conversations + archives',   run: () => this.load() },
+        { label: 'Toggle archived',  hint: 'show/hide archived',                run: () => { this.showArchived = !this.showArchived; }},
+        { label: 'Open Instant',     hint: 'select conversation #1',            run: () => this.selectConv(1) },
+        { label: 'Open Reasoning',   hint: 'navigate to reasoning module',      run: () => location.href = '../reasoning/index.html' }
+      ];
+    },
+    get paletteResults() {
+      const q = this.paletteQuery.trim().toLowerCase();
+      if (!q) return this.paletteActions;
+      return this.paletteActions.filter(a => a.label.toLowerCase().includes(q) || a.hint.toLowerCase().includes(q));
+    },
+
+    _isTypingTarget(evt) { const t = evt.target; return t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable); },
+    onGlobalKey(evt) {
+      const k = evt.key;
+      if ((evt.ctrlKey || evt.metaKey) && (k === 'k' || k === 'K')) { this.openPalette(); evt.preventDefault(); return; }
+      if (this.paletteOpen) {
+        if (k === 'Escape') { this.closePalette(); evt.preventDefault(); return; }
+        if (k === 'Enter')  { this.runPaletteAction(this.paletteSelectedIdx); evt.preventDefault(); return; }
+        if (k === 'ArrowDown') { this.paletteSelectedIdx = Math.min(this.paletteSelectedIdx + 1, this.paletteResults.length - 1); evt.preventDefault(); return; }
+        if (k === 'ArrowUp')   { this.paletteSelectedIdx = Math.max(this.paletteSelectedIdx - 1, 0); evt.preventDefault(); return; }
+        return;
+      }
+      if (this._isTypingTarget(evt)) return;
+      if (k === 'r' || k === 'R') { this.load(); evt.preventDefault(); }
+    }
+  };
+}
+</script>
+</body>
+</html>

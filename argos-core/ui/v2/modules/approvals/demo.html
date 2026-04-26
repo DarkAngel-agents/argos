@@ -1,0 +1,2214 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1440">
+<title>ARGOS — Approvals (demo)</title>
+
+<style>
+/* ============================================================
+   TOKENS (mirrors DESIGN.md §3)
+   ============================================================ */
+:root {
+  --bg-primary:     #0b0e14;
+  --bg-elevated:    #141923;
+  --bg-hover:       #1c2230;
+  --bg-sunken:      #070a10;
+  --border-subtle:  #262d3a;
+  --border-strong:  #3a4252;
+
+  --text-primary:   #e6edf3;
+  --text-secondary: #9da7b8;
+  --text-tertiary:  #6b7486;
+  --text-disabled:  #4a5264;
+
+  --accent:         #c49a6c;
+  --accent-hover:   #d4ae84;
+  --accent-active:  #a47c50;
+  --accent-dim:     #c49a6c33;
+
+  --risk-low:       #7aaa6a;
+  --risk-medium:    #d4a054;
+  --risk-high:      #e06c4f;
+  --risk-critical:  #c73e2b;
+
+  --risk-low-bg:        #7aaa6a1a;
+  --risk-medium-bg:     #d4a0541a;
+  --risk-high-bg:       #e06c4f1a;
+  --risk-critical-bg:   #c73e2b1a;
+
+  --status-ok:      #7aaa6a;
+  --status-warn:    #d4a054;
+  --status-error:   #e06c4f;
+  --status-idle:    #6b7486;
+
+  --font-sans: "Geist", "Geist Sans", system-ui, -apple-system, sans-serif;
+  --font-mono: "Geist Mono", "JetBrains Mono", ui-monospace, monospace;
+
+  --fs-11: 11px; --fs-12: 12px; --fs-13: 13px;
+  --fs-14: 14px; --fs-16: 16px; --fs-20: 20px; --fs-24: 24px;
+
+  --s-1: 4px; --s-2: 8px; --s-3: 12px; --s-4: 16px;
+  --s-5: 20px; --s-6: 24px; --s-8: 32px; --s-10: 40px;
+  --s-12: 48px; --s-16: 64px;
+
+  --r-sm: 4px; --r-md: 6px; --r-lg: 10px; --r-pill: 999px;
+
+  --elev-3: 0 0 0 1px var(--border-strong), 0 8px 24px -12px #0000007a;
+  --elev-modal: 0 0 0 1px var(--border-strong), 0 32px 64px -16px #000000a0;
+
+  --focus-ring: 0 0 0 2px var(--bg-primary), 0 0 0 4px var(--accent);
+
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --dur-fast: 100ms; --dur-base: 160ms; --dur-slow: 220ms;
+
+  --h-topbar: 48px;
+  --h-statusbar: 28px;
+  --w-sidebar: 200px;
+  --w-rail: 280px;
+  --w-drawer: 480px;
+
+  /* Knobs (tweakables) */
+  --card-pad-v: 14px;
+  --card-pad-h: 16px;
+  --card-gap: 12px;
+  --rail-width: 280px;
+  --risk-strip: 2px;
+}
+
+/* ============================================================
+   BASE
+   ============================================================ */
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; height: 100%; background: var(--bg-primary); }
+body {
+  font-family: var(--font-sans);
+  font-size: var(--fs-13);
+  line-height: 1.45;
+  color: var(--text-primary);
+  font-feature-settings: "ss01", "cv11";
+  -webkit-font-smoothing: antialiased;
+}
+code, kbd, pre, .mono { font-family: var(--font-mono); font-size: var(--fs-12); }
+button { font: inherit; color: inherit; background: none; border: none; cursor: pointer; padding: 0; }
+input, textarea { font: inherit; color: inherit; }
+::selection { background: var(--accent-dim); color: var(--text-primary); }
+
+.num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+/* ============================================================
+   LAYOUT SHELL
+   ============================================================ */
+.shell {
+  display: grid;
+  grid-template-columns: var(--w-sidebar) 1fr var(--rail-width);
+  grid-template-rows: var(--h-topbar) 1fr var(--h-statusbar);
+  grid-template-areas:
+    "topbar topbar topbar"
+    "sidebar main   rail"
+    "status  status status";
+  height: 100vh;
+  min-height: 760px;
+}
+
+/* --- TOPBAR --- */
+.topbar {
+  grid-area: topbar;
+  display: flex;
+  align-items: center;
+  gap: var(--s-4);
+  padding: 0 var(--s-4);
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border-subtle);
+  z-index: 5;
+}
+.topbar__brand {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: 0 var(--s-2) 0 0;
+  text-decoration: none;
+  color: var(--text-primary);
+}
+.topbar__brand img { display: block; width: 20px; height: 23px; }
+.topbar__wordmark {
+  font-weight: 700;
+  font-size: var(--fs-14);
+  letter-spacing: 0.02em;
+}
+.topbar__divider {
+  width: 1px; height: 20px; background: var(--border-subtle); margin: 0 var(--s-2);
+}
+.topbar__module {
+  font-size: var(--fs-13);
+  color: var(--text-secondary);
+}
+.topbar__module strong {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+.topbar__module .crumb-sep {
+  color: var(--text-disabled);
+  margin: 0 var(--s-2);
+}
+.topbar__search {
+  flex: 1;
+  max-width: 420px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: 0 var(--s-3);
+  height: 28px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-sm);
+  color: var(--text-tertiary);
+  font-size: var(--fs-12);
+  cursor: text;
+}
+.topbar__search:hover { border-color: var(--border-strong); }
+.topbar__search .kbd { margin-left: auto; }
+.topbar__right {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+}
+.topbar__conn {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: 4px var(--s-2);
+  font-family: var(--font-mono);
+  font-size: var(--fs-11);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-sm);
+}
+.topbar__user {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  background: var(--bg-hover);
+  border: 1px solid var(--border-subtle);
+  display: grid; place-items: center;
+  font-size: var(--fs-12); font-weight: 600;
+  color: var(--text-secondary);
+}
+
+/* --- KBD --- */
+.kbd {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  padding: 1px 5px;
+  border: 1px solid var(--border-subtle);
+  border-bottom-width: 2px;
+  border-radius: 3px;
+  color: var(--text-tertiary);
+  background: var(--bg-sunken);
+  line-height: 1.4;
+}
+
+/* --- Dot --- */
+.dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+.dot--ok    { background: var(--status-ok); box-shadow: 0 0 6px -1px var(--status-ok); }
+.dot--warn  { background: var(--status-warn); box-shadow: 0 0 6px -1px var(--status-warn); }
+.dot--error { background: var(--status-error); box-shadow: 0 0 6px -1px var(--status-error); }
+.dot--idle  { background: var(--status-idle); }
+.dot--pulse { animation: pulse 1.4s var(--ease-out) infinite; }
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+/* --- SIDEBAR --- */
+.sidebar {
+  grid-area: sidebar;
+  background: var(--bg-elevated);
+  border-right: 1px solid var(--border-subtle);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+.side-section {
+  padding: var(--s-4) var(--s-3);
+  border-bottom: 1px solid var(--border-subtle);
+}
+.side-section:last-child { border-bottom: none; }
+.side-section__label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  padding: 0 var(--s-2);
+  margin-bottom: var(--s-2);
+}
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  padding: 6px var(--s-2);
+  border-radius: var(--r-sm);
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+  text-decoration: none;
+  cursor: pointer;
+  user-select: none;
+}
+.nav-item:hover { background: var(--bg-hover); color: var(--text-primary); }
+.nav-item.is-active {
+  background: var(--accent-dim);
+  color: var(--accent);
+  font-weight: 500;
+}
+.nav-item .nav-item__shortcut {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-disabled);
+}
+.nav-item.is-active .nav-item__shortcut { color: var(--accent); opacity: 0.7; }
+.nav-item__icon {
+  width: 14px; height: 14px;
+  display: grid; place-items: center;
+  color: currentColor;
+  flex-shrink: 0;
+}
+.nav-item__count {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: var(--fs-11);
+  color: var(--text-tertiary);
+  padding: 1px 6px;
+  border-radius: var(--r-pill);
+  background: var(--bg-hover);
+}
+.nav-item.is-active .nav-item__count {
+  background: var(--accent);
+  color: var(--bg-primary);
+}
+
+.filter-group { margin-bottom: var(--s-4); }
+.filter-group:last-child { margin-bottom: 0; }
+.filter-row {
+  display: flex; align-items: center;
+  gap: var(--s-2);
+  padding: 4px var(--s-2);
+  font-size: var(--fs-12);
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-radius: var(--r-sm);
+  user-select: none;
+}
+.filter-row:hover { background: var(--bg-hover); }
+.filter-row input {
+  width: 12px; height: 12px;
+  accent-color: var(--accent);
+  margin: 0;
+}
+.filter-row .mono { color: var(--text-tertiary); margin-left: auto; font-size: var(--fs-11); }
+.filter-row.is-checked { color: var(--text-primary); }
+
+.side-search {
+  display: flex; align-items: center;
+  height: 26px;
+  padding: 0 var(--s-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-sm);
+  background: var(--bg-sunken);
+  font-size: var(--fs-12);
+  color: var(--text-tertiary);
+  margin-bottom: var(--s-2);
+}
+.side-search input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text-primary);
+  font-size: var(--fs-12);
+  width: 100%;
+}
+.side-search input::placeholder { color: var(--text-tertiary); }
+
+.toggle-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: var(--s-2);
+  font-size: var(--fs-12);
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-radius: var(--r-sm);
+}
+.toggle-row:hover { background: var(--bg-hover); }
+.toggle {
+  width: 26px; height: 14px;
+  background: var(--border-strong);
+  border-radius: var(--r-pill);
+  position: relative;
+  transition: background var(--dur-base);
+}
+.toggle::after {
+  content: "";
+  position: absolute;
+  width: 10px; height: 10px; border-radius: 50%;
+  background: var(--text-primary);
+  top: 2px; left: 2px;
+  transition: left var(--dur-base);
+}
+.toggle.is-on { background: var(--accent); }
+.toggle.is-on::after { left: 14px; background: var(--bg-primary); }
+
+/* --- MAIN --- */
+.main {
+  grid-area: main;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  background: var(--bg-primary);
+}
+.module__head {
+  display: flex;
+  align-items: center;
+  gap: var(--s-4);
+  padding: var(--s-4) var(--s-5);
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+.module__title {
+  font-size: var(--fs-16);
+  font-weight: 600;
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+.module__sub {
+  color: var(--text-secondary);
+  font-size: var(--fs-12);
+}
+.module__actions {
+  margin-left: auto;
+  display: flex; gap: var(--s-2); align-items: center;
+}
+.module__body {
+  flex: 1;
+  overflow-y: auto;
+  position: relative;
+}
+
+/* Segmented control */
+.seg {
+  display: inline-flex;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-sm);
+  padding: 2px;
+  gap: 1px;
+}
+.seg__btn {
+  padding: 4px 10px;
+  font-size: var(--fs-12);
+  color: var(--text-secondary);
+  border-radius: 3px;
+}
+.seg__btn.is-active {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+/* --- BUTTONS --- */
+.btn {
+  height: 28px;
+  padding: 0 var(--s-3);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  border-radius: var(--r-sm);
+  font-size: var(--fs-13);
+  font-weight: 500;
+  border: 1px solid transparent;
+  transition: background var(--dur-fast), color var(--dur-fast), border-color var(--dur-fast);
+  white-space: nowrap;
+}
+.btn:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.btn--primary { background: var(--accent); color: var(--bg-primary); font-weight: 600; }
+.btn--primary:hover { background: var(--accent-hover); }
+.btn--primary:active { background: var(--accent-active); }
+.btn--ghost { border-color: var(--border-subtle); color: var(--text-primary); }
+.btn--ghost:hover { background: var(--bg-hover); border-color: var(--border-strong); }
+.btn--danger { color: var(--risk-high); border-color: color-mix(in oklch, var(--risk-high) 35%, transparent); }
+.btn--danger:hover { background: var(--risk-high-bg); }
+.btn--icon { width: 28px; padding: 0; justify-content: center; color: var(--text-secondary); }
+.btn--icon:hover { background: var(--bg-hover); color: var(--text-primary); }
+.btn .kbd { margin-left: var(--s-2); }
+
+/* --- RISK BADGE --- */
+.risk {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+  font-size: var(--fs-11);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  line-height: 1.4;
+}
+.risk--low      { background: var(--risk-low-bg);      color: var(--risk-low); }
+.risk--medium   { background: var(--risk-medium-bg);   color: var(--risk-medium); }
+.risk--high     { background: var(--risk-high-bg);     color: var(--risk-high); }
+.risk--critical { background: var(--risk-critical-bg); color: var(--risk-critical); }
+
+/* --- CARD --- */
+.card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--card-gap);
+  padding: var(--card-pad-v) var(--card-pad-h) var(--card-pad-v) calc(var(--card-pad-h) + var(--risk-strip) + 2px);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-md);
+  transition: border-color var(--dur-fast), background var(--dur-fast);
+  cursor: default;
+}
+.card::before {
+  content: "";
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: var(--risk-strip);
+  border-radius: var(--r-md) 0 0 var(--r-md);
+  background: var(--risk-medium);
+}
+.card[data-risk="low"]::before      { background: var(--risk-low); }
+.card[data-risk="medium"]::before   { background: var(--risk-medium); }
+.card[data-risk="high"]::before     { background: var(--risk-high); }
+.card[data-risk="critical"]::before { background: var(--risk-critical); }
+.card.is-focused {
+  border-color: var(--accent);
+  background: color-mix(in oklch, var(--bg-elevated) 85%, var(--accent) 15%);
+}
+.card:hover { border-color: var(--border-strong); }
+.card__head {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  font-size: var(--fs-12);
+  color: var(--text-secondary);
+}
+.card__head .mono { color: var(--text-secondary); }
+.card__head .auth-id { color: var(--text-primary); font-weight: 500; }
+.card__head .spacer { flex: 1; }
+.card__kind {
+  padding: 1px 6px;
+  border-radius: var(--r-sm);
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--fs-11);
+}
+.card__op {
+  font-family: var(--font-mono);
+  font-size: var(--fs-12);
+  color: var(--text-primary);
+  background: var(--bg-sunken);
+  padding: var(--s-2) var(--s-3);
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border-subtle);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.5;
+}
+.card__op::before { content: "$ "; color: var(--text-tertiary); }
+.card__meta {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  font-size: var(--fs-12);
+  color: var(--text-secondary);
+}
+.card__meta .sep { color: var(--text-disabled); }
+.card__timeout { color: var(--risk-medium); }
+.card__foot {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+}
+.card__foot .spacer { flex: 1; }
+.card__stale {
+  font-family: var(--font-mono);
+  font-size: var(--fs-11);
+  color: var(--text-tertiary);
+  padding: 2px 6px;
+  border-radius: var(--r-sm);
+  border: 1px dashed var(--border-strong);
+}
+
+/* Queue list */
+.queue {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  padding: var(--s-4) var(--s-5);
+}
+
+/* Session group */
+.group {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-md);
+  background: var(--bg-elevated);
+  overflow: hidden;
+}
+.group__head {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  padding: var(--s-3) var(--s-4);
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border-subtle);
+  cursor: pointer;
+  user-select: none;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+.group__head:hover { background: var(--bg-hover); }
+.group__chev {
+  color: var(--text-tertiary);
+  transition: transform var(--dur-base);
+}
+.group__head.is-collapsed .group__chev { transform: rotate(-90deg); }
+.group__id {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.group__meta {
+  color: var(--text-secondary);
+  font-size: var(--fs-12);
+}
+.group__counts {
+  margin-left: auto;
+  display: flex;
+  gap: var(--s-2);
+  font-family: var(--font-mono);
+  font-size: var(--fs-11);
+}
+.group__count {
+  padding: 1px 6px;
+  border-radius: var(--r-pill);
+  font-weight: 600;
+}
+.group__count--low      { background: var(--risk-low-bg);      color: var(--risk-low); }
+.group__count--medium   { background: var(--risk-medium-bg);   color: var(--risk-medium); }
+.group__count--high     { background: var(--risk-high-bg);     color: var(--risk-high); }
+.group__count--critical { background: var(--risk-critical-bg); color: var(--risk-critical); }
+.group__body {
+  padding: var(--s-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  background: var(--bg-primary);
+}
+
+/* --- RAIL (Now feed) --- */
+.rail {
+  grid-area: rail;
+  background: var(--bg-elevated);
+  border-left: 1px solid var(--border-subtle);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.rail__head {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: var(--s-3) var(--s-4);
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+.rail__title {
+  font-size: var(--fs-12);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+.rail__body {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--s-3);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.feed-item {
+  display: flex;
+  gap: var(--s-2);
+  padding: 6px var(--s-2);
+  border-radius: var(--r-sm);
+  font-size: var(--fs-12);
+  line-height: 1.35;
+  cursor: default;
+  border-left: 2px solid transparent;
+}
+.feed-item:hover { background: var(--bg-hover); }
+.feed-item__time {
+  font-family: var(--font-mono);
+  font-size: var(--fs-11);
+  color: var(--text-tertiary);
+  width: 32px;
+  flex-shrink: 0;
+  padding-top: 2px;
+}
+.feed-item__body { flex: 1; min-width: 0; }
+.feed-item__title {
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+}
+.feed-item__sub {
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-size: var(--fs-11);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.feed-item--pending { border-left-color: var(--risk-medium); }
+.feed-item--approved { border-left-color: var(--risk-low); }
+.feed-item--denied { border-left-color: var(--risk-high); }
+.feed-item--critical { border-left-color: var(--risk-critical); }
+.feed-item--error { border-left-color: var(--risk-high); }
+.feed-item--info { border-left-color: var(--text-tertiary); }
+
+/* --- STATUSBAR --- */
+.statusbar {
+  grid-area: status;
+  display: flex;
+  align-items: center;
+  gap: var(--s-4);
+  padding: 0 var(--s-4);
+  background: var(--bg-elevated);
+  border-top: 1px solid var(--border-subtle);
+  font-family: var(--font-mono);
+  font-size: var(--fs-11);
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+.statusbar .seg-group {
+  display: flex; align-items: center; gap: var(--s-1);
+}
+.statusbar .label { color: var(--text-tertiary); }
+.statusbar .spacer { flex: 1; }
+
+/* ============================================================
+   STATE: empty
+   ============================================================ */
+.empty {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  padding: var(--s-12);
+}
+.empty__inner {
+  text-align: center;
+  max-width: 360px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s-3);
+}
+.empty__mark {
+  width: 64px;
+  height: 64px;
+  opacity: 0.45;
+  margin-bottom: var(--s-2);
+}
+.empty__title {
+  font-size: var(--fs-20);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+  margin: 0;
+}
+.empty__sub {
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+}
+.empty__meta {
+  font-family: var(--font-mono);
+  color: var(--text-tertiary);
+  font-size: var(--fs-11);
+  margin-top: var(--s-3);
+}
+
+/* ============================================================
+   STATE: disconnected banner
+   ============================================================ */
+.banner {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  padding: var(--s-2) var(--s-5);
+  background: var(--risk-high-bg);
+  border-bottom: 1px solid color-mix(in oklch, var(--risk-high) 40%, transparent);
+  color: var(--risk-high);
+  font-size: var(--fs-12);
+}
+.banner__msg { color: var(--text-primary); }
+.banner__hint { color: var(--text-secondary); margin-left: var(--s-3); }
+.banner .spacer { flex: 1; }
+
+/* ============================================================
+   DENY FLOW (inline deny reason)
+   ============================================================ */
+.deny {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  padding: var(--s-3);
+  margin-top: var(--s-2);
+  border: 1px solid var(--border-strong);
+  background: var(--bg-sunken);
+  border-radius: var(--r-sm);
+}
+.deny__label {
+  font-size: var(--fs-11);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+.deny textarea {
+  width: 100%;
+  min-height: 72px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-sm);
+  padding: var(--s-2) var(--s-3);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: var(--fs-13);
+  line-height: 1.45;
+  resize: vertical;
+  outline: none;
+}
+.deny textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.deny__presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+}
+.deny__preset {
+  padding: 3px 8px;
+  font-size: var(--fs-11);
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-sm);
+  background: var(--bg-elevated);
+  cursor: pointer;
+}
+.deny__preset:hover { color: var(--text-primary); border-color: var(--border-strong); }
+.deny__actions {
+  display: flex;
+  gap: var(--s-2);
+  justify-content: flex-end;
+  align-items: center;
+}
+.deny__hint {
+  margin-right: auto;
+  font-size: var(--fs-11);
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+}
+
+/* ============================================================
+   DRAWER
+   ============================================================ */
+.drawer {
+  position: absolute;
+  top: 0; right: 0; bottom: 0;
+  width: var(--w-drawer);
+  background: var(--bg-elevated);
+  border-left: 1px solid var(--border-strong);
+  display: flex;
+  flex-direction: column;
+  z-index: 20;
+  box-shadow: -16px 0 32px -12px #00000066;
+  animation: drawerIn var(--dur-slow) var(--ease-out);
+}
+@keyframes drawerIn {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+.drawer__head {
+  display: flex; align-items: center; gap: var(--s-3);
+  padding: var(--s-4) var(--s-5);
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+.drawer__title {
+  font-size: var(--fs-14);
+  font-weight: 600;
+  margin: 0;
+}
+.drawer__body {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--s-4) var(--s-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-5);
+}
+.drawer__actions {
+  display: flex; gap: var(--s-2);
+  padding: var(--s-3) var(--s-5);
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg-elevated);
+  flex-shrink: 0;
+}
+.drawer__actions .spacer { flex: 1; }
+
+.kv {
+  display: grid;
+  grid-template-columns: 104px 1fr;
+  gap: var(--s-1) var(--s-3);
+  font-size: var(--fs-12);
+}
+.kv dt {
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  padding-top: 1px;
+}
+.kv dd {
+  margin: 0;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  word-break: break-all;
+}
+
+.section-label {
+  font-size: var(--fs-11);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  margin-bottom: var(--s-2);
+}
+pre.json {
+  background: var(--bg-sunken);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-sm);
+  padding: var(--s-3);
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--fs-12);
+  color: var(--text-primary);
+  line-height: 1.55;
+  overflow-x: auto;
+  white-space: pre;
+}
+.json .k { color: var(--accent); }
+.json .s { color: var(--risk-low); }
+.json .n { color: var(--risk-medium); }
+.json .c { color: var(--text-tertiary); }
+
+/* ============================================================
+   MODAL (critical)
+   ============================================================ */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: #000000cc;
+  z-index: 70;
+  display: grid;
+  place-items: center;
+  animation: fadeIn var(--dur-base);
+}
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+.modal {
+  width: 520px;
+  max-width: calc(100vw - 48px);
+  background: var(--bg-elevated);
+  border-radius: var(--r-lg);
+  box-shadow: var(--elev-modal);
+  overflow: hidden;
+  animation: modalIn var(--dur-slow) var(--ease-out);
+}
+@keyframes modalIn {
+  from { transform: translateY(12px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+.modal__head {
+  padding: var(--s-4) var(--s-5) var(--s-3);
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+}
+.modal__badge {
+  width: 32px; height: 32px;
+  background: var(--risk-critical-bg);
+  color: var(--risk-critical);
+  border-radius: var(--r-sm);
+  display: grid; place-items: center;
+  flex-shrink: 0;
+}
+.modal__title {
+  font-size: var(--fs-16);
+  font-weight: 600;
+  margin: 0;
+}
+.modal__sub { color: var(--text-secondary); font-size: var(--fs-12); }
+.modal__body {
+  padding: var(--s-4) var(--s-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+}
+.modal__foot {
+  padding: var(--s-3) var(--s-5);
+  border-top: 1px solid var(--border-subtle);
+  display: flex;
+  gap: var(--s-2);
+  align-items: center;
+  background: var(--bg-sunken);
+}
+.modal__foot .spacer { flex: 1; }
+.modal__foot .hint {
+  font-family: var(--font-mono);
+  font-size: var(--fs-11);
+  color: var(--text-tertiary);
+}
+
+/* ============================================================
+   COMMAND PALETTE
+   ============================================================ */
+.palette-backdrop {
+  position: fixed;
+  inset: 0;
+  background: #00000099;
+  z-index: 60;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding-top: 14vh;
+  animation: fadeIn var(--dur-base);
+}
+.palette {
+  width: 640px;
+  max-width: calc(100vw - 48px);
+  background: var(--bg-elevated);
+  border-radius: var(--r-lg);
+  box-shadow: var(--elev-modal);
+  overflow: hidden;
+  animation: modalIn var(--dur-base) var(--ease-out);
+}
+.palette__input {
+  width: 100%;
+  height: 48px;
+  padding: 0 var(--s-5);
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: var(--fs-14);
+  border-bottom: 1px solid var(--border-subtle);
+}
+.palette__input::placeholder { color: var(--text-tertiary); }
+.palette__group {
+  padding: var(--s-2) 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.palette__group:last-child { border-bottom: none; }
+.palette__group-label {
+  padding: 4px var(--s-5);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+.palette__item {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  padding: 8px var(--s-5);
+  font-size: var(--fs-13);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+.palette__item .match { color: var(--accent); font-weight: 600; }
+.palette__item.is-active {
+  background: var(--bg-hover);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+.palette__item .spacer { flex: 1; }
+.palette__item .meta {
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-size: var(--fs-11);
+}
+.palette__item .kbd { margin-left: 0; }
+.palette__foot {
+  display: flex;
+  align-items: center;
+  gap: var(--s-4);
+  padding: var(--s-2) var(--s-5);
+  background: var(--bg-sunken);
+  border-top: 1px solid var(--border-subtle);
+  font-family: var(--font-mono);
+  font-size: var(--fs-11);
+  color: var(--text-tertiary);
+}
+.palette__foot .hint { display: flex; align-items: center; gap: var(--s-2); }
+
+/* ============================================================
+   TOAST
+   ============================================================ */
+.toasts {
+  position: fixed;
+  right: var(--s-5);
+  bottom: calc(var(--h-statusbar) + var(--s-3));
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  z-index: 50;
+  max-width: 360px;
+}
+.toast {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-left: 3px solid var(--risk-medium);
+  border-radius: var(--r-sm);
+  padding: var(--s-3);
+  display: flex;
+  gap: var(--s-2);
+  box-shadow: var(--elev-3);
+  min-width: 280px;
+}
+.toast--high { border-left-color: var(--risk-high); }
+.toast--info { border-left-color: var(--accent); }
+.toast__body { flex: 1; }
+.toast__title { font-size: var(--fs-12); font-weight: 500; margin-bottom: 2px; }
+.toast__sub { font-family: var(--font-mono); font-size: var(--fs-11); color: var(--text-secondary); }
+
+/* ============================================================
+   STATE SWITCHER (debug)
+   ============================================================ */
+.state-switcher {
+  position: fixed;
+  top: calc(var(--h-topbar) + var(--s-3));
+  right: var(--s-5);
+  z-index: 90;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-md);
+  padding: var(--s-3);
+  width: 260px;
+  box-shadow: var(--elev-3);
+  font-size: var(--fs-12);
+}
+.state-switcher h4 {
+  margin: 0 0 var(--s-2);
+  font-size: var(--fs-11);
+  letter-spacing: 0.06em;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+}
+.state-switcher__list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.state-switcher__item {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: 4px var(--s-2);
+  border-radius: var(--r-sm);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: var(--fs-12);
+}
+.state-switcher__item:hover { background: var(--bg-hover); color: var(--text-primary); }
+.state-switcher__item.is-active {
+  background: var(--accent-dim);
+  color: var(--accent);
+}
+.state-switcher__item .idx {
+  width: 16px;
+  color: var(--text-tertiary);
+  font-size: var(--fs-11);
+}
+.state-switcher__item.is-active .idx { color: var(--accent); }
+.state-switcher__hint {
+  margin-top: var(--s-3);
+  padding-top: var(--s-2);
+  border-top: 1px solid var(--border-subtle);
+  color: var(--text-tertiary);
+  font-size: var(--fs-11);
+  font-family: var(--font-mono);
+  line-height: 1.6;
+}
+
+/* ============================================================
+   TWEAKS PANEL
+   ============================================================ */
+.tweaks {
+  position: fixed;
+  bottom: calc(var(--h-statusbar) + var(--s-3));
+  left: calc(var(--w-sidebar) + var(--s-3));
+  z-index: 85;
+  width: 280px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-md);
+  box-shadow: var(--elev-3);
+  font-size: var(--fs-12);
+  overflow: hidden;
+}
+.tweaks__head {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: var(--s-2) var(--s-3);
+  background: var(--bg-sunken);
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: var(--fs-11);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-tertiary);
+  font-weight: 600;
+}
+.tweaks__head .spacer { flex: 1; }
+.tweaks__body {
+  padding: var(--s-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+}
+.tweak {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.tweak__label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: var(--fs-11);
+  color: var(--text-secondary);
+}
+.tweak__label .val {
+  font-family: var(--font-mono);
+  color: var(--accent);
+  font-size: var(--fs-11);
+}
+.tweak__seg {
+  display: flex;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-sm);
+  padding: 2px;
+  gap: 1px;
+}
+.tweak__seg button {
+  flex: 1;
+  padding: 4px 6px;
+  font-size: var(--fs-11);
+  font-family: var(--font-mono);
+  color: var(--text-tertiary);
+  border-radius: 3px;
+  text-align: center;
+}
+.tweak__seg button:hover { color: var(--text-primary); }
+.tweak__seg button.is-active {
+  background: var(--accent);
+  color: var(--bg-primary);
+  font-weight: 600;
+}
+
+/* ============================================================
+   EXTRA
+   ============================================================ */
+.icon { width: 14px; height: 14px; stroke-width: 1.75; }
+[data-risk-strip="full"] .card {
+  padding-left: calc(var(--card-pad-h) + 6px);
+}
+[data-risk-strip="full"] .card::before {
+  width: 6px;
+}
+</style>
+</head>
+<body>
+
+<div x-data="app()" x-cloak>
+
+  <!-- ============================================================
+       LAYOUT SHELL
+       ============================================================ -->
+  <div class="shell" :data-risk-strip="strip">
+
+    <!-- TOPBAR -->
+    <header class="topbar">
+      <a class="topbar__brand" href="#">
+        <img src="/ui/v2/static/brand/mark-full-color.svg" alt="">
+        <span class="topbar__wordmark">ARGOS</span>
+      </a>
+      <span class="topbar__divider"></span>
+      <div class="topbar__module">
+        <span>Approvals</span>
+        <span class="crumb-sep">/</span>
+        <strong x-text="currentStateLabel()"></strong>
+      </div>
+
+      <div class="topbar__search" @click="state='palette-open'">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+        <span>Search or run command</span>
+        <span class="kbd">⌘K</span>
+      </div>
+
+      <div class="topbar__right">
+        <div class="topbar__conn">
+          <span class="dot" :class="state==='disconnected' ? 'dot--error dot--pulse' : 'dot--ok'"></span>
+          <span x-text="state==='disconnected' ? 'reconnecting' : 'live'"></span>
+        </div>
+        <div class="topbar__user" title="operator@hermes">op</div>
+      </div>
+    </header>
+
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+      <div class="side-section">
+        <div class="side-section__label">Modules</div>
+        <div class="nav-item is-active">
+          <span class="nav-item__icon">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 7h18M3 12h18M3 17h12"/></svg>
+          </span>
+          Approvals
+          <span class="nav-item__count num" x-text="queueCountDisplay()"></span>
+        </div>
+        <div class="nav-item">
+          <span class="nav-item__icon">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+          </span>
+          Fleet
+          <span class="nav-item__shortcut">g f</span>
+        </div>
+        <div class="nav-item">
+          <span class="nav-item__icon">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M8 5v14l11-7z"/></svg>
+          </span>
+          Jobs
+          <span class="nav-item__shortcut">g j</span>
+        </div>
+        <div class="nav-item">
+          <span class="nav-item__icon">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 12h-4l-3 9-6-18-3 9H2"/></svg>
+          </span>
+          Health
+          <span class="nav-item__shortcut">g h</span>
+        </div>
+        <div class="nav-item">
+          <span class="nav-item__icon">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          </span>
+          Chat
+          <span class="nav-item__shortcut">g c</span>
+        </div>
+        <div class="nav-item">
+          <span class="nav-item__icon">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+          </span>
+          Reasoning
+          <span class="nav-item__shortcut">g r</span>
+        </div>
+        <div class="nav-item">
+          <span class="nav-item__icon">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          </span>
+          Settings
+          <span class="nav-item__shortcut">g s</span>
+        </div>
+      </div>
+
+      <div class="side-section">
+        <div class="side-section__label">Filters</div>
+        <div class="side-search">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="color: var(--text-tertiary);"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+          <input type="text" :placeholder="state==='filtered' ? 'auth id, path…' : 'search queue'" :value="state==='filtered' ? 'rm' : ''">
+        </div>
+
+        <div class="filter-group">
+          <div class="side-section__label" style="padding: var(--s-2) var(--s-2) var(--s-1);">Risk</div>
+          <template x-for="r in ['low','medium','high','critical']" :key="r">
+            <label class="filter-row" :class="{'is-checked': isFilterChecked('risk', r)}">
+              <input type="checkbox" :checked="isFilterChecked('risk', r)">
+              <span style="text-transform: capitalize;" x-text="r"></span>
+              <span class="mono" x-text="filterCount('risk', r)"></span>
+            </label>
+          </template>
+        </div>
+
+        <div class="filter-group">
+          <div class="side-section__label" style="padding: var(--s-2) var(--s-2) var(--s-1);">Kind</div>
+          <template x-for="k in ['cc_bash','cc_file','cc_sql','cc_tool']" :key="k">
+            <label class="filter-row" :class="{'is-checked': isFilterChecked('kind', k)}">
+              <input type="checkbox" :checked="isFilterChecked('kind', k)">
+              <span class="mono" x-text="k"></span>
+              <span class="mono" x-text="filterCount('kind', k)"></span>
+            </label>
+          </template>
+        </div>
+
+        <div class="toggle-row">
+          <span>Group by session</span>
+          <span class="toggle" :class="{'is-on': state==='grouped'}"></span>
+        </div>
+        <div class="toggle-row">
+          <span>Vim bindings</span>
+          <span class="toggle"></span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- MAIN -->
+    <main class="main" @click="focusedId = null">
+
+      <!-- Disconnected banner (only in disconnected state) -->
+      <template x-if="state==='disconnected'">
+        <div class="banner">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4m0 4h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/></svg>
+          <span class="banner__msg">SSE disconnected — reconnecting in 8s (attempt 3/∞)</span>
+          <span class="banner__hint">queue frozen at 18:42:11 · 14s ago</span>
+          <span class="spacer"></span>
+          <button class="btn btn--ghost" style="height: 24px;">Retry now</button>
+        </div>
+      </template>
+
+      <!-- Module head -->
+      <div class="module__head">
+        <h1 class="module__title">Approvals</h1>
+        <span class="module__sub" x-text="moduleSubtitle()"></span>
+        <div class="module__actions">
+          <div class="seg">
+            <button class="seg__btn" :class="{'is-active': state!=='grouped'}">Flat</button>
+            <button class="seg__btn" :class="{'is-active': state==='grouped'}">Grouped</button>
+          </div>
+          <button class="btn btn--icon" title="Refresh">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 12a9 9 0 0 1 15-6.7L21 8M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16M3 21v-5h5"/></svg>
+          </button>
+          <button class="btn btn--ghost">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 12l2 2 4-4"/></svg>
+            Approve all low
+            <span class="kbd">A</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Body per state -->
+      <div class="module__body">
+
+        <!-- =========== STATE: empty =========== -->
+        <template x-if="state==='empty'">
+          <div class="empty">
+            <div class="empty__inner">
+              <img class="empty__mark" src="/ui/v2/static/brand/mark-mono-amber.svg" alt="">
+              <h2 class="empty__title">All clear</h2>
+              <div class="empty__sub">No pending approvals.</div>
+              <div class="empty__meta">
+                Waiting for agent activity · 2 swarm nodes online<br>
+                last auth decided 4m 12s ago · s-abc123
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <!-- =========== STATE: single-low =========== -->
+        <template x-if="state==='single-low'">
+          <div class="queue">
+            <article class="card is-focused" data-risk="low">
+              <header class="card__head">
+                <span class="risk risk--low">low</span>
+                <span class="card__kind">cc_bash</span>
+                <span class="mono auth-id">#1247</span>
+                <span class="mono">12s ago</span>
+                <span class="spacer"></span>
+                <span class="mono" style="color: var(--text-tertiary);">s-abc123</span>
+              </header>
+              <div class="card__op">ls -la /tmp/claude-workspace/</div>
+              <div class="card__meta">
+                <span class="mono">hermes.local</span>
+                <span class="sep">·</span>
+                <span>session idle 2m</span>
+                <span class="sep">·</span>
+                <span class="card__timeout">timeout in 4m 48s</span>
+              </div>
+              <footer class="card__foot">
+                <span class="mono" style="color: var(--text-tertiary);">intent: read-only filesystem inspection</span>
+                <span class="spacer"></span>
+                <button class="btn btn--ghost"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M7 17l10-10M17 17V7H7"/></svg>Details <span class="kbd">⏎</span></button>
+                <button class="btn btn--danger">Deny <span class="kbd">D</span></button>
+                <button class="btn btn--primary">Approve <span class="kbd">A</span></button>
+              </footer>
+            </article>
+          </div>
+        </template>
+
+        <!-- =========== STATE: single-critical =========== -->
+        <template x-if="state==='single-critical'">
+          <div class="queue">
+            <article class="card is-focused" data-risk="critical">
+              <header class="card__head">
+                <span class="risk risk--critical">critical</span>
+                <span class="card__kind">cc_bash</span>
+                <span class="mono auth-id">#1251</span>
+                <span class="mono">4s ago</span>
+                <span class="spacer"></span>
+                <span class="mono" style="color: var(--text-tertiary);">s-xyz789</span>
+              </header>
+              <div class="card__op">rm -rf /var/log/argos/*.log</div>
+              <div class="card__meta">
+                <span class="mono">beasty.local</span>
+                <span class="sep">·</span>
+                <span>root required</span>
+                <span class="sep">·</span>
+                <span class="card__timeout" style="color: var(--risk-critical);">awaiting decision</span>
+              </div>
+            </article>
+          </div>
+        </template>
+
+        <!-- =========== STATE: busy =========== -->
+        <template x-if="state==='busy'">
+          <div class="queue">
+            <template x-for="(a, i) in busyQueue" :key="a.id">
+              <article class="card" :class="{'is-focused': i===0}" :data-risk="a.risk">
+                <header class="card__head">
+                  <span class="risk" :class="'risk--' + a.risk" x-text="a.risk"></span>
+                  <span class="card__kind" x-text="a.kind"></span>
+                  <span class="mono auth-id" x-text="'#' + a.id"></span>
+                  <span class="mono" x-text="a.ago"></span>
+                  <span class="spacer"></span>
+                  <span class="mono" style="color: var(--text-tertiary);" x-text="a.session"></span>
+                </header>
+                <div class="card__op" x-text="a.op"></div>
+                <div class="card__meta">
+                  <span class="mono" x-text="a.host"></span>
+                  <span class="sep">·</span>
+                  <span x-text="a.intent"></span>
+                  <span class="sep">·</span>
+                  <span class="card__timeout" x-text="'timeout in ' + a.timeout"></span>
+                </div>
+              </article>
+            </template>
+          </div>
+        </template>
+
+        <!-- =========== STATE: grouped =========== -->
+        <template x-if="state==='grouped'">
+          <div class="queue">
+            <template x-for="(g, gi) in groupedQueue" :key="g.id">
+              <div class="group">
+                <div class="group__head">
+                  <svg class="icon group__chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+                  <span class="group__id" x-text="g.id"></span>
+                  <span class="group__meta" x-text="g.pending + ' pending · started ' + g.started"></span>
+                  <span class="group__counts">
+                    <template x-for="c in g.counts" :key="c.level">
+                      <span class="group__count" :class="'group__count--' + c.level" x-text="c.n + ' ' + c.level"></span>
+                    </template>
+                  </span>
+                </div>
+                <div class="group__body">
+                  <template x-for="(a, i) in g.items" :key="a.id">
+                    <article class="card" :class="{'is-focused': gi===0 && i===0}" :data-risk="a.risk">
+                      <header class="card__head">
+                        <span class="risk" :class="'risk--' + a.risk" x-text="a.risk"></span>
+                        <span class="card__kind" x-text="a.kind"></span>
+                        <span class="mono auth-id" x-text="'#' + a.id"></span>
+                        <span class="mono" x-text="a.ago"></span>
+                        <span class="spacer"></span>
+                        <span class="mono" style="color: var(--text-tertiary);" x-text="'timeout ' + a.timeout"></span>
+                      </header>
+                      <div class="card__op" x-text="a.op"></div>
+                    </article>
+                  </template>
+                </div>
+              </div>
+            </template>
+          </div>
+        </template>
+
+        <!-- =========== STATE: deny-flow =========== -->
+        <template x-if="state==='deny-flow'">
+          <div class="queue">
+            <article class="card is-focused" data-risk="high">
+              <header class="card__head">
+                <span class="risk risk--high">high</span>
+                <span class="card__kind">cc_bash</span>
+                <span class="mono auth-id">#1249</span>
+                <span class="mono">38s ago</span>
+                <span class="spacer"></span>
+                <span class="mono" style="color: var(--text-tertiary);">s-def456</span>
+              </header>
+              <div class="card__op">sudo systemctl restart postgresql</div>
+              <div class="card__meta">
+                <span class="mono">beasty.local</span>
+                <span class="sep">·</span>
+                <span>may interrupt active queries</span>
+                <span class="sep">·</span>
+                <span class="card__timeout">timeout in 3m 22s</span>
+              </div>
+              <div class="deny">
+                <span class="deny__label">Deny reason</span>
+                <textarea autofocus>Not during business hours — schedule for 02:00 maintenance window.</textarea>
+                <div class="deny__presets">
+                  <button class="deny__preset">scope-creep</button>
+                  <button class="deny__preset">needs-human-check</button>
+                  <button class="deny__preset">wrong-environment</button>
+                  <button class="deny__preset">already-applied</button>
+                </div>
+                <div class="deny__actions">
+                  <span class="deny__hint">⌘⏎ confirm · esc cancel</span>
+                  <button class="btn btn--ghost">Cancel <span class="kbd">esc</span></button>
+                  <button class="btn btn--danger" style="color: var(--bg-primary); background: var(--risk-high); border-color: var(--risk-high);">Confirm deny <span class="kbd">⌘⏎</span></button>
+                </div>
+              </div>
+            </article>
+            <!-- two more cards behind it (dimmed) -->
+            <article class="card" data-risk="medium" style="opacity: 0.55;">
+              <header class="card__head">
+                <span class="risk risk--medium">medium</span>
+                <span class="card__kind">cc_file</span>
+                <span class="mono auth-id">#1250</span>
+                <span class="mono">1m ago</span>
+                <span class="spacer"></span>
+                <span class="mono" style="color: var(--text-tertiary);">s-def456</span>
+              </header>
+              <div class="card__op">write ~/.argos/argos-core/swarm-stack.yml</div>
+            </article>
+            <article class="card" data-risk="low" style="opacity: 0.55;">
+              <header class="card__head">
+                <span class="risk risk--low">low</span>
+                <span class="card__kind">cc_bash</span>
+                <span class="mono auth-id">#1252</span>
+                <span class="mono">1m 24s ago</span>
+                <span class="spacer"></span>
+                <span class="mono" style="color: var(--text-tertiary);">s-ghi012</span>
+              </header>
+              <div class="card__op">git status</div>
+            </article>
+          </div>
+        </template>
+
+        <!-- =========== STATE: drawer-open =========== -->
+        <template x-if="state==='drawer-open'">
+          <div style="height: 100%; display: flex;">
+            <div class="queue" style="flex: 1; overflow-y: auto;">
+              <template x-for="(a, i) in busyQueue.slice(0, 7)" :key="a.id">
+                <article class="card" :class="{'is-focused': i===0}" :data-risk="a.risk">
+                  <header class="card__head">
+                    <span class="risk" :class="'risk--' + a.risk" x-text="a.risk"></span>
+                    <span class="card__kind" x-text="a.kind"></span>
+                    <span class="mono auth-id" x-text="'#' + a.id"></span>
+                    <span class="mono" x-text="a.ago"></span>
+                    <span class="spacer"></span>
+                    <span class="mono" style="color: var(--text-tertiary);" x-text="a.session"></span>
+                  </header>
+                  <div class="card__op" x-text="a.op"></div>
+                </article>
+              </template>
+            </div>
+            <aside class="drawer">
+              <div class="drawer__head">
+                <span class="risk risk--high">high</span>
+                <h2 class="drawer__title mono">#1249</h2>
+                <span class="mono" style="color: var(--text-tertiary);">cc_bash</span>
+                <span class="spacer" style="flex:1;"></span>
+                <button class="btn btn--icon" @click.stop="state='busy'" title="Close (Esc)">
+                  <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                </button>
+              </div>
+              <div class="drawer__body">
+                <div>
+                  <div class="section-label">Operation</div>
+                  <pre class="json">sudo systemctl restart postgresql</pre>
+                </div>
+                <div>
+                  <div class="section-label">Context</div>
+                  <dl class="kv">
+                    <dt>id</dt><dd>1249</dd>
+                    <dt>session</dt><dd>s-def456</dd>
+                    <dt>host</dt><dd>beasty.local</dd>
+                    <dt>agent</dt><dd>claude-code 2.1.119</dd>
+                    <dt>requested</dt><dd>2026-04-24 18:41:33 UTC (38s ago)</dd>
+                    <dt>expires</dt><dd>2026-04-24 18:45:33 UTC</dd>
+                    <dt>intent</dt><dd>restart pg to pick up new pg_hba.conf</dd>
+                    <dt>blast radius</dt><dd>postgres · argos-core · swarm-worker</dd>
+                  </dl>
+                </div>
+                <div>
+                  <div class="section-label">Intent (parsed)</div>
+<pre class="json"><span class="c">// intent_json</span>
+{
+  <span class="k">"goal"</span>: <span class="s">"apply pg_hba.conf changes from auth #1247"</span>,
+  <span class="k">"blast_radius"</span>: [<span class="s">"postgres"</span>, <span class="s">"argos-core"</span>],
+  <span class="k">"reversible"</span>: <span class="n">true</span>,
+  <span class="k">"estimated_downtime_ms"</span>: <span class="n">400</span>,
+  <span class="k">"precedents"</span>: [<span class="s">"#1102"</span>, <span class="s">"#987"</span>]
+}</pre>
+                </div>
+                <div>
+                  <div class="section-label">Session history · s-def456</div>
+                  <pre class="json"><span class="c">14m ago</span>  cc_bash    #1241  <span class="s">approved</span>  psql -c "select 1"
+<span class="c">12m ago</span>  cc_file    #1244  <span class="s">approved</span>  write /etc/pg_hba.conf
+<span class="c">4m ago</span>   cc_bash    #1247  <span class="s">approved</span>  pg_ctl reload
+<span class="c">38s ago</span>  cc_bash    #1249  <span style="color: var(--risk-medium);">pending</span>   systemctl restart postgresql</pre>
+                </div>
+              </div>
+              <div class="drawer__actions">
+                <button class="btn btn--ghost">Postpone 10m</button>
+                <span class="spacer"></span>
+                <button class="btn btn--danger">Deny <span class="kbd">D</span></button>
+                <button class="btn btn--primary">Approve <span class="kbd">A</span></button>
+              </div>
+            </aside>
+          </div>
+        </template>
+
+        <!-- =========== STATE: disconnected =========== -->
+        <template x-if="state==='disconnected'">
+          <div class="queue">
+            <template x-for="(a, i) in busyQueue.slice(0, 6)" :key="a.id">
+              <article class="card" :data-risk="a.risk">
+                <header class="card__head">
+                  <span class="risk" :class="'risk--' + a.risk" x-text="a.risk"></span>
+                  <span class="card__kind" x-text="a.kind"></span>
+                  <span class="mono auth-id" x-text="'#' + a.id"></span>
+                  <span class="mono" x-text="a.ago"></span>
+                  <span class="spacer"></span>
+                  <span class="card__stale">stale 14s</span>
+                </header>
+                <div class="card__op" x-text="a.op"></div>
+                <div class="card__meta">
+                  <span class="mono" x-text="a.host"></span>
+                  <span class="sep">·</span>
+                  <span style="color: var(--text-tertiary);">decisions disabled until reconnect</span>
+                </div>
+              </article>
+            </template>
+          </div>
+        </template>
+
+        <!-- =========== STATE: filtered =========== -->
+        <template x-if="state==='filtered'">
+          <div class="queue">
+            <div style="padding: var(--s-2) var(--s-3); background: var(--bg-elevated); border: 1px solid var(--border-subtle); border-radius: var(--r-sm); display: flex; gap: var(--s-2); align-items: center; font-size: var(--fs-12); color: var(--text-secondary);">
+              <span>Filters:</span>
+              <span class="risk risk--high" style="font-size: 10px;">high</span>
+              <span class="risk risk--critical" style="font-size: 10px;">critical</span>
+              <span class="card__kind">cc_bash</span>
+              <span style="color: var(--text-tertiary);">matches "rm"</span>
+              <span class="spacer" style="flex:1;"></span>
+              <span class="mono" style="color: var(--text-tertiary);">4 of 12 shown</span>
+              <button class="btn btn--icon" title="Clear filters">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+              </button>
+            </div>
+            <template x-for="(a, i) in filteredQueue" :key="a.id">
+              <article class="card" :class="{'is-focused': i===0}" :data-risk="a.risk">
+                <header class="card__head">
+                  <span class="risk" :class="'risk--' + a.risk" x-text="a.risk"></span>
+                  <span class="card__kind" x-text="a.kind"></span>
+                  <span class="mono auth-id" x-text="'#' + a.id"></span>
+                  <span class="mono" x-text="a.ago"></span>
+                  <span class="spacer"></span>
+                  <span class="mono" style="color: var(--text-tertiary);" x-text="a.session"></span>
+                </header>
+                <div class="card__op" x-text="a.op"></div>
+                <div class="card__meta">
+                  <span class="mono" x-text="a.host"></span>
+                  <span class="sep">·</span>
+                  <span x-text="a.intent"></span>
+                  <span class="sep">·</span>
+                  <span class="card__timeout" x-text="'timeout in ' + a.timeout"></span>
+                </div>
+              </article>
+            </template>
+          </div>
+        </template>
+
+        <!-- =========== STATE: palette-open (queue behind palette) =========== -->
+        <template x-if="state==='palette-open'">
+          <div class="queue">
+            <template x-for="(a, i) in busyQueue.slice(0, 5)" :key="a.id">
+              <article class="card" :data-risk="a.risk" style="opacity: 0.4;">
+                <header class="card__head">
+                  <span class="risk" :class="'risk--' + a.risk" x-text="a.risk"></span>
+                  <span class="card__kind" x-text="a.kind"></span>
+                  <span class="mono auth-id" x-text="'#' + a.id"></span>
+                  <span class="mono" x-text="a.ago"></span>
+                </header>
+                <div class="card__op" x-text="a.op"></div>
+              </article>
+            </template>
+          </div>
+        </template>
+
+      </div>
+    </main>
+
+    <!-- RAIL (Now) -->
+    <aside class="rail">
+      <div class="rail__head">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="color: var(--accent);"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+        <span class="rail__title">Now</span>
+        <span class="spacer" style="flex: 1;"></span>
+        <span class="dot" :class="state==='disconnected' ? 'dot--error' : 'dot--ok dot--pulse'"></span>
+        <span class="mono" style="color: var(--text-tertiary); font-size: var(--fs-11);" x-text="state==='disconnected' ? 'paused' : 'live'"></span>
+      </div>
+      <div class="rail__body">
+        <template x-for="item in feed" :key="item.t + item.title">
+          <div class="feed-item" :class="'feed-item--' + item.kind">
+            <span class="feed-item__time" x-text="item.t"></span>
+            <div class="feed-item__body">
+              <div class="feed-item__title" x-text="item.title"></div>
+              <div class="feed-item__sub" x-text="item.sub"></div>
+            </div>
+          </div>
+        </template>
+      </div>
+    </aside>
+
+    <!-- STATUSBAR -->
+    <footer class="statusbar">
+      <span class="seg-group"><span class="dot dot--ok"></span><span class="label">swarm:</span><span>2/2</span></span>
+      <span class="seg-group"><span class="dot dot--ok"></span><span class="label">db:</span><span>OK</span></span>
+      <span class="seg-group"><span class="dot" :class="state==='disconnected' ? 'dot--error' : 'dot--ok'"></span><span class="label">hb:</span><span x-text="state==='disconnected' ? '14s' : '4s'"></span></span>
+      <span class="seg-group"><span class="label">tick:</span><span>1m12s ago</span></span>
+      <span class="seg-group">
+        <span class="dot" :class="state==='disconnected' ? 'dot--error' : 'dot--idle'"></span>
+        <span class="label">errors:</span><span x-text="state==='disconnected' ? '1' : '0'"></span>
+      </span>
+      <span class="spacer"></span>
+      <span class="label">argos v0.7.0 · build abc123 · claude-code 2.1.119</span>
+    </footer>
+
+  </div>
+
+  <!-- ============================================================
+       OVERLAYS
+       ============================================================ -->
+
+  <!-- CRITICAL MODAL -->
+  <template x-if="state==='single-critical'">
+    <div class="modal-backdrop" @click.self="">
+      <div class="modal" role="dialog" aria-labelledby="m-t">
+        <div class="modal__head">
+          <span class="modal__badge">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 18px; height: 18px;"><path d="M12 9v4m0 4h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/></svg>
+          </span>
+          <div>
+            <h2 id="m-t" class="modal__title">Critical approval — destructive operation</h2>
+            <div class="modal__sub">Auth <span class="mono">#1251</span> · session <span class="mono">s-xyz789</span> · beasty.local</div>
+          </div>
+        </div>
+        <div class="modal__body">
+          <div>
+            <div class="section-label">Requested operation</div>
+            <pre class="json" style="border-color: color-mix(in oklch, var(--risk-critical) 40%, transparent);">rm -rf /var/log/argos/*.log</pre>
+          </div>
+          <div>
+            <div class="section-label">Blast radius</div>
+            <dl class="kv">
+              <dt>kind</dt><dd>cc_bash · requires root</dd>
+              <dt>target</dt><dd>/var/log/argos/*.log (18 files, ~2.4 GiB)</dd>
+              <dt>reversible</dt><dd style="color: var(--risk-critical);">false — deletion is permanent</dd>
+              <dt>precedents</dt><dd>none from this session</dd>
+            </dl>
+          </div>
+          <div style="font-size: var(--fs-12); color: var(--text-secondary); padding: var(--s-3); border-left: 2px solid var(--risk-critical); background: var(--risk-critical-bg);">
+            Agent claims intent: "free disk before postgres dump". No logrotate policy found — review before approving.
+          </div>
+        </div>
+        <div class="modal__foot">
+          <span class="hint">Esc acknowledges but card stays highlighted.</span>
+          <span class="spacer"></span>
+          <button class="btn btn--ghost">Review later <span class="kbd">esc</span></button>
+          <button class="btn btn--danger">Deny <span class="kbd">D</span></button>
+          <button class="btn" style="background: var(--risk-critical); color: white; font-weight: 600;">Approve <span class="kbd">⌘⏎</span></button>
+        </div>
+      </div>
+    </div>
+  </template>
+
+  <!-- COMMAND PALETTE -->
+  <template x-if="state==='palette-open'">
+    <div class="palette-backdrop" @click.self="state='busy'">
+      <div class="palette" role="dialog">
+        <input class="palette__input" type="text" value="approve" autofocus placeholder="Search or run command…">
+
+        <div class="palette__group">
+          <div class="palette__group-label">Commands</div>
+          <div class="palette__item is-active">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="9"/></svg>
+            <span><span class="match">Approve</span> focused card</span>
+            <span class="spacer"></span>
+            <span class="meta">no-confirm if low/medium</span>
+            <span class="kbd">A</span>
+          </div>
+          <div class="palette__item">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 12l2 2 4-4"/></svg>
+            <span><span class="match">Approve</span> all low-risk (6)</span>
+            <span class="spacer"></span>
+            <span class="meta">shift-A</span>
+          </div>
+          <div class="palette__item">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14"/></svg>
+            <span><span class="match">Approve</span> all from session…</span>
+          </div>
+        </div>
+
+        <div class="palette__group">
+          <div class="palette__group-label">Pending auths</div>
+          <div class="palette__item">
+            <span class="risk risk--high" style="font-size: 10px;">high</span>
+            <span class="mono">#1249</span>
+            <span class="mono" style="color: var(--text-secondary);">systemctl restart postgresql</span>
+            <span class="spacer"></span>
+            <span class="meta mono">s-def456 · 38s</span>
+          </div>
+          <div class="palette__item">
+            <span class="risk risk--critical" style="font-size: 10px;">critical</span>
+            <span class="mono">#1251</span>
+            <span class="mono" style="color: var(--text-secondary);">rm -rf /var/log/argos/*.log</span>
+            <span class="spacer"></span>
+            <span class="meta mono">s-xyz789 · 4s</span>
+          </div>
+        </div>
+
+        <div class="palette__group">
+          <div class="palette__group-label">Recent</div>
+          <div class="palette__item">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+            <span>goto fleet</span>
+            <span class="spacer"></span>
+            <span class="meta">3m ago</span>
+            <span class="kbd">g f</span>
+          </div>
+          <div class="palette__item">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+            <span>toggle vim mode</span>
+            <span class="spacer"></span>
+            <span class="meta">11m ago</span>
+          </div>
+        </div>
+
+        <div class="palette__foot">
+          <span class="hint"><span class="kbd">↑↓</span> navigate</span>
+          <span class="hint"><span class="kbd">⏎</span> run</span>
+          <span class="hint"><span class="kbd">esc</span> close</span>
+          <span class="spacer" style="flex:1;"></span>
+          <span class="mono" style="color: var(--text-disabled);">12 matches</span>
+        </div>
+      </div>
+    </div>
+  </template>
+
+  <!-- Toasts (show in 'busy' & 'drawer-open' for realism) -->
+  <template x-if="state==='busy' || state==='drawer-open'">
+    <div class="toasts">
+      <div class="toast toast--high">
+        <span class="dot dot--error" style="margin-top: 4px;"></span>
+        <div class="toast__body">
+          <div class="toast__title">High-risk auth pending</div>
+          <div class="toast__sub">#1249 · systemctl restart postgresql · s-def456</div>
+        </div>
+      </div>
+    </div>
+  </template>
+
+  <!-- ============================================================
+       STATE SWITCHER (hidden, toggle with ?)
+       ============================================================ -->
+  <div class="state-switcher" x-show="showSwitcher" x-transition>
+    <h4>
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+      States · <span class="kbd">?</span> toggle
+    </h4>
+    <div class="state-switcher__list">
+      <template x-for="(s, i) in states" :key="s.key">
+        <div class="state-switcher__item" :class="{'is-active': state===s.key}" @click="state=s.key">
+          <span class="idx" x-text="(i+1).toString().padStart(2,'0')"></span>
+          <span x-text="s.label"></span>
+        </div>
+      </template>
+    </div>
+    <div class="state-switcher__hint">
+      j/k · cycle states<br>
+      ⌘K · palette · ? · hide
+    </div>
+  </div>
+
+  <!-- ============================================================
+       TWEAKS (3 knobs: density, rail, strip)
+       ============================================================ -->
+  <div class="tweaks" x-show="showTweaks" x-transition>
+    <div class="tweaks__head">
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 7h16M4 12h10M4 17h6"/></svg>
+      <span>Tweaks</span>
+      <span class="spacer"></span>
+      <button class="btn btn--icon" style="width: 20px; height: 20px; color: var(--text-tertiary);" @click="hideTweaks()">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 12px; height: 12px;"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="tweaks__body">
+      <div class="tweak">
+        <div class="tweak__label"><span>Card density</span><span class="val" x-text="density"></span></div>
+        <div class="tweak__seg">
+          <button @click="setDensity('compact')"  :class="{'is-active': density==='compact'}">compact</button>
+          <button @click="setDensity('default')"  :class="{'is-active': density==='default'}">default</button>
+          <button @click="setDensity('spacious')" :class="{'is-active': density==='spacious'}">spacious</button>
+        </div>
+      </div>
+      <div class="tweak">
+        <div class="tweak__label"><span>Rail width</span><span class="val" x-text="rail"></span></div>
+        <div class="tweak__seg">
+          <button @click="setRail('collapsed')" :class="{'is-active': rail==='collapsed'}">48px</button>
+          <button @click="setRail('default')"   :class="{'is-active': rail==='default'}">280px</button>
+          <button @click="setRail('expanded')"  :class="{'is-active': rail==='expanded'}">360px</button>
+        </div>
+      </div>
+      <div class="tweak">
+        <div class="tweak__label"><span>Risk strip</span><span class="val" x-text="strip"></span></div>
+        <div class="tweak__seg">
+          <button @click="strip='thin'"  :class="{'is-active': strip==='thin'}">2px</button>
+          <button @click="strip='med'"   :class="{'is-active': strip==='med'}">4px</button>
+          <button @click="strip='full'" :class="{'is-active': strip==='full'}">full</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script src="https://unpkg.com/alpinejs@3.14.1/dist/cdn.min.js" defer></script>
+<script>
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "state": "busy",
+  "density": "default",
+  "rail": "default",
+  "strip": "thin"
+}/*EDITMODE-END*/;
+
+function app() {
+  return {
+    // --- core ---
+    state: TWEAK_DEFAULTS.state,
+    states: [
+      { key: 'empty',           label: 'empty' },
+      { key: 'single-low',      label: 'single-low' },
+      { key: 'single-critical', label: 'single-critical' },
+      { key: 'busy',            label: 'busy' },
+      { key: 'grouped',         label: 'grouped' },
+      { key: 'deny-flow',       label: 'deny-flow' },
+      { key: 'drawer-open',     label: 'drawer-open' },
+      { key: 'disconnected',    label: 'disconnected' },
+      { key: 'filtered',        label: 'filtered' },
+      { key: 'palette-open',    label: 'palette-open' },
+    ],
+    showSwitcher: false,
+    focusedId: null,
+
+    // --- tweak knobs ---
+    density: TWEAK_DEFAULTS.density,
+    rail: TWEAK_DEFAULTS.rail,
+    strip: TWEAK_DEFAULTS.strip,
+    showTweaks: false,
+
+    init() {
+      this.applyDensity();
+      this.applyRail();
+
+      window.addEventListener('keydown', (e) => {
+        const t = document.activeElement;
+        const typing = t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
+        if (e.key === 'Escape') {
+          if (this.state === 'palette-open' || this.state === 'drawer-open' || this.state === 'single-critical') {
+            this.state = 'busy';
+          }
+          return;
+        }
+        if (typing) return;
+        if (e.key === '?') { this.showSwitcher = !this.showSwitcher; e.preventDefault(); }
+        else if (e.key === 'k' && !e.ctrlKey && !e.metaKey) { this.cycleState(-1); }
+        else if (e.key === 'j') { this.cycleState(1); }
+        else if ((e.key === 'k' || e.key === 'K') && (e.ctrlKey || e.metaKey)) {
+          this.state = 'palette-open'; e.preventDefault();
+        }
+      });
+
+      // tweaks panel protocol
+      window.addEventListener('message', (e) => {
+        if (e.data?.type === '__activate_edit_mode') this.showTweaks = true;
+        if (e.data?.type === '__deactivate_edit_mode') this.showTweaks = false;
+      });
+      window.parent.postMessage({ type: '__edit_mode_available' }, '*');
+    },
+    hideTweaks() {
+      this.showTweaks = false;
+      window.parent.postMessage({ type: '__edit_mode_dismissed' }, '*');
+    },
+    cycleState(dir) {
+      const i = this.states.findIndex(s => s.key === this.state);
+      const n = (i + dir + this.states.length) % this.states.length;
+      this.state = this.states[n].key;
+    },
+    currentStateLabel() {
+      const s = this.states.find(s => s.key === this.state);
+      return s ? s.label : this.state;
+    },
+    moduleSubtitle() {
+      switch (this.state) {
+        case 'empty': return 'no pending · 2 auto-approved in last 5m';
+        case 'single-low': return '1 pending · low risk';
+        case 'single-critical': return '1 pending · CRITICAL — intercepting';
+        case 'busy': return '12 pending · newest first';
+        case 'grouped': return '12 pending across 3 sessions';
+        case 'deny-flow': return '3 pending · drafting deny reason for #1249';
+        case 'drawer-open': return '7 pending · detail #1249';
+        case 'disconnected': return '6 pending · decisions disabled until reconnect';
+        case 'filtered': return '4 of 12 shown · risk:high,critical · kind:cc_bash';
+        case 'palette-open': return '5 pending · palette open';
+      }
+      return '';
+    },
+    queueCountDisplay() {
+      switch (this.state) {
+        case 'empty': return '0';
+        case 'single-low': case 'single-critical': return '1';
+        case 'deny-flow': return '3';
+        case 'disconnected': return '6';
+        case 'drawer-open': return '7';
+        case 'filtered': return '4';
+        case 'palette-open': return '5';
+        default: return '12';
+      }
+    },
+    isFilterChecked(cat, val) {
+      if (this.state !== 'filtered') return false;
+      if (cat === 'risk') return val === 'high' || val === 'critical';
+      if (cat === 'kind') return val === 'cc_bash';
+      return false;
+    },
+    filterCount(cat, val) {
+      const counts = {
+        risk: { low: 6, medium: 3, high: 2, critical: 1 },
+        kind: { cc_bash: 7, cc_file: 3, cc_sql: 1, cc_tool: 1 },
+      };
+      return counts[cat][val];
+    },
+
+    // --- mock data ---
+    busyQueue: [
+      { id: 1249, risk: 'high',     kind: 'cc_bash', op: 'sudo systemctl restart postgresql',          ago: '38s ago',   host: 'beasty.local',  intent: 'apply pg_hba.conf',         timeout: '3m 22s', session: 's-def456' },
+      { id: 1251, risk: 'critical', kind: 'cc_bash', op: 'rm -rf /var/log/argos/*.log',                ago: '4s ago',    host: 'beasty.local',  intent: 'free disk before dump',     timeout: '4m 56s', session: 's-xyz789' },
+      { id: 1250, risk: 'medium',   kind: 'cc_file', op: 'write ~/.argos/argos-core/swarm-stack.yml',  ago: '1m ago',    host: 'hermes.local',  intent: 'add healthcheck block',     timeout: '4m 00s', session: 's-def456' },
+      { id: 1248, risk: 'medium',   kind: 'cc_sql',  op: 'UPDATE authorizations SET status=\'timeout\' WHERE …', ago: '2m 12s ago', host: 'beasty.local', intent: 'cron stale-sweep',     timeout: '2m 48s', session: 's-cron01' },
+      { id: 1247, risk: 'low',      kind: 'cc_bash', op: 'ls -la /tmp/claude-workspace/',              ago: '2m 44s ago',host: 'hermes.local',  intent: 'filesystem inspection',     timeout: '2m 16s', session: 's-abc123' },
+      { id: 1246, risk: 'low',      kind: 'cc_bash', op: 'git status',                                 ago: '3m 01s ago',host: 'hermes.local',  intent: 'pre-commit check',          timeout: '1m 59s', session: 's-abc123' },
+      { id: 1245, risk: 'high',     kind: 'cc_bash', op: 'docker stack deploy -c swarm-stack.yml argos', ago: '3m 20s ago',host: 'beasty.local', intent: 'deploy v0.7.0',          timeout: '1m 40s', session: 's-def456' },
+      { id: 1244, risk: 'low',      kind: 'cc_file', op: 'write ui/v2/modules/approvals/demo.html',    ago: '3m 48s ago',host: 'hermes.local',  intent: 'iterate approvals UI',      timeout: '1m 12s', session: 's-abc123' },
+      { id: 1243, risk: 'medium',   kind: 'cc_tool', op: 'web_fetch https://docs.anthropic.com/…',     ago: '4m 10s ago',host: 'hermes.local',  intent: 'look up SSE headers',       timeout: '50s',    session: 's-abc123' },
+      { id: 1242, risk: 'low',      kind: 'cc_bash', op: 'cat /etc/nginx/nginx.conf | head -40',       ago: '4m 32s ago',host: 'beasty.local',  intent: 'verify proxy config',       timeout: '28s',    session: 's-def456' },
+      { id: 1241, risk: 'low',      kind: 'cc_bash', op: 'psql -c "select count(*) from approvals"',   ago: '4m 55s ago',host: 'beasty.local',  intent: 'sanity check db size',      timeout: '5s',     session: 's-abc123' },
+      { id: 1240, risk: 'low',      kind: 'cc_bash', op: 'tail -20 /var/log/argos/swarm.log',          ago: '5m 03s ago',host: 'beasty.local',  intent: 'check last error',          timeout: '—',      session: 's-cron01' },
+    ],
+
+    get groupedQueue() {
+      const groups = { 's-abc123': [], 's-def456': [], 's-xyz789': [], 's-cron01': [] };
+      for (const a of this.busyQueue) (groups[a.session] ||= []).push(a);
+      const meta = {
+        's-abc123': { started: '14m ago', hint: '' },
+        's-def456': { started: '8m ago',  hint: '' },
+        's-xyz789': { started: '30s ago', hint: '' },
+        's-cron01': { started: '3m ago',  hint: '' },
+      };
+      return Object.entries(groups).filter(([, items]) => items.length).map(([id, items]) => {
+        const counts = ['low', 'medium', 'high', 'critical']
+          .map(level => ({ level, n: items.filter(i => i.risk === level).length }))
+          .filter(c => c.n > 0);
+        return { id, items, pending: items.length, started: meta[id].started, counts };
+      });
+    },
+
+    get filteredQueue() {
+      return this.busyQueue.filter(a =>
+        (a.risk === 'high' || a.risk === 'critical') &&
+        a.kind === 'cc_bash' &&
+        a.op.toLowerCase().includes('rm') || a.op.toLowerCase().includes('sudo') || a.op.toLowerCase().includes('docker')
+      ).slice(0, 4);
+    },
+
+    feed: [
+      { t: '2s',    kind: 'critical', title: 'auth_pending #1251',  sub: 'rm -rf · s-xyz789' },
+      { t: '38s',   kind: 'pending',  title: 'auth_pending #1249',  sub: 'systemctl restart · s-def456' },
+      { t: '1m',    kind: 'pending',  title: 'auth_pending #1250',  sub: 'write swarm-stack.yml' },
+      { t: '2m',    kind: 'approved', title: 'auth_decided #1248',  sub: 'approved · cron stale-sweep' },
+      { t: '2m',    kind: 'pending',  title: 'auth_pending #1248',  sub: 'UPDATE authorizations…' },
+      { t: '2m',    kind: 'approved', title: 'auth_decided #1247',  sub: 'approved · ls /tmp/' },
+      { t: '3m',    kind: 'approved', title: 'auth_decided #1246',  sub: 'approved · git status' },
+      { t: '3m',    kind: 'denied',   title: 'auth_decided #1245',  sub: 'denied · "schedule maint window"' },
+      { t: '3m',    kind: 'info',     title: 'heartbeat_summary',   sub: 'swarm 2/2 · db OK · 4s' },
+      { t: '4m',    kind: 'approved', title: 'auth_decided #1244',  sub: 'approved · write demo.html' },
+      { t: '4m',    kind: 'approved', title: 'auth_decided #1243',  sub: 'approved · web_fetch' },
+      { t: '4m',    kind: 'info',     title: 'tick',                sub: 'queue depth: 12 pending' },
+      { t: '4m',    kind: 'approved', title: 'auth_decided #1242',  sub: 'approved · cat nginx.conf' },
+      { t: '5m',    kind: 'approved', title: 'auth_decided #1241',  sub: 'approved · psql count' },
+      { t: '5m',    kind: 'info',     title: 'hello',               sub: 'SSE connected · bootstrap 12' },
+      { t: '5m',    kind: 'approved', title: 'auth_decided #1240',  sub: 'auto-approved · tail log' },
+    ],
+
+    // --- tweaks ---
+    setDensity(v) {
+      this.density = v;
+      this.applyDensity();
+      this.persist({ density: v });
+    },
+    applyDensity() {
+      const root = document.documentElement;
+      if (this.density === 'compact')       { root.style.setProperty('--card-pad-v','8px'); root.style.setProperty('--card-gap','6px'); }
+      else if (this.density === 'spacious') { root.style.setProperty('--card-pad-v','20px'); root.style.setProperty('--card-gap','16px'); }
+      else                                  { root.style.setProperty('--card-pad-v','14px'); root.style.setProperty('--card-gap','12px'); }
+    },
+    setRail(v) {
+      this.rail = v;
+      this.applyRail();
+      this.persist({ rail: v });
+    },
+    applyRail() {
+      const root = document.documentElement;
+      if (this.rail === 'collapsed')      root.style.setProperty('--rail-width','48px');
+      else if (this.rail === 'expanded')  root.style.setProperty('--rail-width','360px');
+      else                                root.style.setProperty('--rail-width','280px');
+    },
+    persist(edits) {
+      try { window.parent.postMessage({ type: '__edit_mode_set_keys', edits }, '*'); } catch(e) {}
+    },
+  };
+}
+</script>
+</body>
+</html>

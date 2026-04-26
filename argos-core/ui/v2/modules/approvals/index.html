@@ -1,0 +1,1163 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1440">
+<title>ARGOS — Approvals (demo)</title>
+
+<link rel="icon" href="/favicon.ico" type="image/x-icon">
+  <link rel="stylesheet" href="../../static/tokens.css">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div x-data="app()" x-cloak>
+
+  <!-- ============================================================
+       LAYOUT SHELL
+       ============================================================ -->
+  <div class="shell">
+
+    <!-- TOPBAR -->
+    <header class="topbar">
+      <a class="topbar__brand" href="#">
+        <img src="/ui/v2/static/brand/mark-full-color.svg" alt="">
+        <span class="topbar__wordmark">ARGOS</span>
+      </a>
+      <span class="topbar__divider"></span>
+      <div class="topbar__module">
+        <span>Approvals</span>
+        <span class="crumb-sep">/</span>
+        <strong x-text="state"></strong>
+      </div>
+
+      <div class="topbar__search" @click="openPalette()">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+        <span>Search or run command</span>
+        <span class="kbd">⌘K</span>
+      </div>
+
+      <div class="topbar__right">
+        <div class="topbar__conn">
+          <span class="dot" :class="connected ? 'dot--ok' : 'dot--error dot--pulse'"></span>
+          <span x-text="connected ? 'live' : 'reconnecting'"></span>
+        </div>
+        <div class="topbar__user" title="operator@hermes">op</div>
+      </div>
+    </header>
+
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+      <div class="side-section">
+        <div class="side-section__label">Modules</div>
+        <div class="nav-item is-active">
+          <span class="nav-item__icon">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 7h18M3 12h18M3 17h12"/></svg>
+          </span>
+          Approvals
+          <span class="nav-item__count num" x-text="queueCountDisplay()"></span>
+        </div>
+        <div class="nav-item">
+          <span class="nav-item__icon">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+          </span>
+          Fleet
+          <span class="nav-item__shortcut">g f</span>
+        </div>
+        <div class="nav-item">
+          <span class="nav-item__icon">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M8 5v14l11-7z"/></svg>
+          </span>
+          Jobs
+          <span class="nav-item__shortcut">g j</span>
+        </div>
+        <div class="nav-item">
+          <span class="nav-item__icon">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 12h-4l-3 9-6-18-3 9H2"/></svg>
+          </span>
+          Health
+          <span class="nav-item__shortcut">g h</span>
+        </div>
+        <div class="nav-item">
+          <span class="nav-item__icon">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          </span>
+          Chat
+          <span class="nav-item__shortcut">g c</span>
+        </div>
+        <div class="nav-item">
+          <span class="nav-item__icon">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+          </span>
+          Reasoning
+          <span class="nav-item__shortcut">g r</span>
+        </div>
+        <div class="nav-item">
+          <span class="nav-item__icon">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          </span>
+          Settings
+          <span class="nav-item__shortcut">g s</span>
+        </div>
+      </div>
+
+      <div class="side-section">
+        <div class="side-section__label">Filters</div>
+        <div class="side-search">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="color: var(--text-tertiary);"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+          <input type="text" :placeholder="state==='filtered' ? 'auth id, path…' : 'search queue'" :value="state==='filtered' ? 'rm' : ''">
+        </div>
+
+        <div class="filter-group">
+          <div class="side-section__label" style="padding: var(--s-2) var(--s-2) var(--s-1);">Risk</div>
+          <template x-for="r in ['low','medium','high','critical']" :key="r">
+            <label class="filter-row" :class="{'is-checked': isFilterChecked('risk', r)}" @click.prevent="toggleFilter('risk', r)">
+              <input type="checkbox" :checked="isFilterChecked('risk', r)">
+              <span style="text-transform: capitalize;" x-text="r"></span>
+              <span class="mono" x-text="filterCount('risk', r)"></span>
+            </label>
+          </template>
+        </div>
+
+        <div class="filter-group">
+          <div class="side-section__label" style="padding: var(--s-2) var(--s-2) var(--s-1);">Kind</div>
+          <template x-for="k in ['cc_bash','cc_file','cc_sql','cc_tool']" :key="k">
+            <label class="filter-row" :class="{'is-checked': isFilterChecked('kind', k)}" @click.prevent="toggleFilter('kind', k)">
+              <input type="checkbox" :checked="isFilterChecked('kind', k)">
+              <span class="mono" x-text="k"></span>
+              <span class="mono" x-text="filterCount('kind', k)"></span>
+            </label>
+          </template>
+        </div>
+
+        <div class="toggle-row">
+          <span>Group by session</span>
+          <span class="toggle" :class="{'is-on': state==='grouped'}"></span>
+        </div>
+        <div class="toggle-row">
+          <span>Vim bindings</span>
+          <span class="toggle"></span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- MAIN -->
+    <main class="main" @click="focusedId = null">
+
+      <!-- Disconnected banner (only in disconnected state) -->
+      <template x-if="!connected">
+        <div class="banner banner--error">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4m0 4h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/></svg>
+          <span class="banner__msg">SSE disconnected — reconnecting in 8s (attempt 3/∞)</span>
+          <span class="banner__hint">queue frozen at 18:42:11 · 14s ago</span>
+          <span class="spacer"></span>
+          <button class="btn btn--ghost" style="height: 24px;">Retry now</button>
+        </div>
+      </template>
+
+      <!-- Bootstrap pending warning (issue #209: GET pending endpoint missing) -->
+      <template x-if="helloBootstrap && helloBootstrap?.bootstrap_pending_auth > busyQueue.length && !warningDismissed">
+        <div class="banner banner--info">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+          <span class="banner__msg" x-text="helloBootstrap.bootstrap_pending_auth + ' pending exista in backend (issue #209). Live activity below works normally - refresh after fix to see all.'"></span>
+          <span class="banner__hint">approximative count</span>
+          <span class="spacer"></span>
+          <button class="btn btn--icon" @click="warningDismissed = true" title="Dismiss" style="background: transparent; border: 0; color: inherit; cursor: pointer; opacity: 0.7;">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+      </template>
+
+      <!-- Module head -->
+      <div class="module__head">
+        <h1 class="module__title">Approvals</h1>
+        <span class="module__sub" x-text="moduleSubtitle()"></span>
+        <div class="module__actions">
+          <div class="seg">
+            <button class="seg__btn" :class="{'is-active': state!=='grouped'}">Flat</button>
+            <button class="seg__btn" :class="{'is-active': state==='grouped'}">Grouped</button>
+          </div>
+          <button class="btn btn--icon" title="Refresh">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 12a9 9 0 0 1 15-6.7L21 8M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16M3 21v-5h5"/></svg>
+          </button>
+          <button @click="approveAllLow()" class="btn btn--ghost">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 12l2 2 4-4"/></svg>
+            Approve all low
+            <span class="kbd">A</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Body per state -->
+      <div class="module__body">
+
+        <!-- =========== STATE: empty =========== -->
+        <template x-if="state==='empty'">
+          <div class="empty">
+            <div class="empty__inner">
+              <img class="empty__mark" src="/ui/v2/static/brand/mark-mono-amber.svg" alt="">
+              <h2 class="empty__title">All clear</h2>
+              <div class="empty__sub">No pending approvals.</div>
+              <div class="empty__meta">
+                Waiting for agent activity · 2 swarm nodes online<br>
+                last auth decided 4m 12s ago · s-abc123
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <!-- =========== STATE: single-low =========== -->
+        <template x-if="state==='single-low'">
+          <div class="queue">
+            <article class="card is-focused" data-risk="low">
+              <header class="card__head">
+                <span class="risk risk--low">low</span>
+                <span class="card__kind">cc_bash</span>
+                <span class="mono auth-id">#1247</span>
+                <span class="mono">12s ago</span>
+                <span class="spacer"></span>
+                <span class="mono" style="color: var(--text-tertiary);">s-abc123</span>
+              </header>
+              <div class="card__op">ls -la /tmp/claude-workspace/</div>
+              <div class="card__meta">
+                <span class="mono">hermes.local</span>
+                <span class="sep">·</span>
+                <span>session idle 2m</span>
+                <span class="sep">·</span>
+                <span class="card__timeout">timeout in 4m 48s</span>
+              </div>
+              <footer class="card__foot">
+                <span class="mono" style="color: var(--text-tertiary);">intent: read-only filesystem inspection</span>
+                <span class="spacer"></span>
+                <button class="btn btn--ghost" @click.stop="openDrawer(a.id)" :disabled="!!decidingIds[a.id]"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M7 17l10-10M17 17V7H7"/></svg>Details <span class="kbd">⏎</span></button>
+                <button class="btn btn--danger" @click.stop="openDeny(a.id)" :disabled="!!decidingIds[a.id] || denyingId === a.id">Deny <span class="kbd">D</span></button>
+                <button class="btn btn--primary" @click.stop="approveCard(a.id)" :disabled="!!decidingIds[a.id]">Approve <span class="kbd">A</span></button>
+              </footer>
+            <template x-if="denyingId === a.id">
+              <div class="deny">
+                <span class="deny__label">Deny reason</span>
+                <textarea x-model="denyReason" autofocus
+                  @keydown.escape.stop="cancelDeny()"
+                  @keydown.meta.enter.stop="confirmDeny()"
+                  @keydown.ctrl.enter.stop="confirmDeny()"></textarea>
+                <div class="deny__presets">
+                  <button class="deny__preset" @click.stop="denyReason = 'scope-creep'">scope-creep</button>
+                  <button class="deny__preset" @click.stop="denyReason = 'needs-human-check'">needs-human-check</button>
+                  <button class="deny__preset" @click.stop="denyReason = 'wrong-environment'">wrong-environment</button>
+                  <button class="deny__preset" @click.stop="denyReason = 'already-applied'">already-applied</button>
+                </div>
+                <div class="deny__actions">
+                  <span class="deny__hint">⌘⏎ confirm · esc cancel</span>
+                  <button class="btn btn--ghost" @click.stop="cancelDeny()">Cancel <span class="kbd">esc</span></button>
+                  <button class="btn btn--danger" @click.stop="confirmDeny()" :disabled="!denyReason.trim() || !!decidingIds[a.id]">Confirm deny <span class="kbd">⌘⏎</span></button>
+                </div>
+              </div>
+            </template>
+            </article>
+          </div>
+        </template>
+
+        <!-- =========== STATE: single-critical =========== -->
+        <template x-if="state==='single-critical'">
+          <div class="queue">
+            <article class="card is-focused" data-risk="critical">
+              <header class="card__head">
+                <span class="risk risk--critical">critical</span>
+                <span class="card__kind">cc_bash</span>
+                <span class="mono auth-id">#1251</span>
+                <span class="mono">4s ago</span>
+                <span class="spacer"></span>
+                <span class="mono" style="color: var(--text-tertiary);">s-xyz789</span>
+              </header>
+              <div class="card__op">rm -rf /var/log/argos/*.log</div>
+              <div class="card__meta">
+                <span class="mono">beasty.local</span>
+                <span class="sep">·</span>
+                <span>root required</span>
+                <span class="sep">·</span>
+                <span class="card__timeout" style="color: var(--risk-critical);">awaiting decision</span>
+              </div>
+            </article>
+          </div>
+        </template>
+
+        <!-- =========== STATE: busy =========== -->
+        <template x-if="state==='busy'">
+          <div class="queue">
+            <template x-for="(a, i) in busyQueue" :key="a.id">
+              <article class="card" :class="{'is-focused': focusedId !== null ? a.id === focusedId : i===0}" :data-risk="a.risk_level">
+                <header class="card__head">
+                  <span class="risk" :class="'risk--' + a.risk_level" x-text="a.risk_level"></span>
+                  <span class="card__kind" x-text="a.kind"></span>
+                  <span class="mono auth-id" x-text="'#' + a.id"></span>
+                  <span class="mono" x-text="relativeTime(a.requested_at)"></span>
+                  <span class="spacer"></span>
+                  <span class="mono" style="color: var(--text-tertiary);" x-text="a.session"></span>
+                </header>
+                <div class="card__op" x-text="a.operation"></div>
+                <div class="card__meta">
+                  <span class="mono" x-text="a.host"></span>
+                  <span class="sep">·</span>
+                  <span x-text="a.intent"></span>
+                  <span class="sep">·</span>
+                  <span class="card__timeout" x-text="'timeout in ' + a.timeout"></span>
+                </div>
+                <footer class="card__foot">
+                  <span class="mono" style="color: var(--text-tertiary);" x-show="a.intent" x-text="'intent: ' + a.intent"></span>
+                  <span class="spacer"></span>
+                  <button class="btn btn--ghost" @click.stop="openDrawer(a.id)" :disabled="!!decidingIds[a.id]"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M7 17l10-10M17 17V7H7"/></svg>Details <span class="kbd">⏎</span></button>
+                  <button class="btn btn--danger" @click.stop="openDeny(a.id)" :disabled="!!decidingIds[a.id] || denyingId === a.id">Deny <span class="kbd">D</span></button>
+                  <button class="btn btn--primary" @click.stop="approveCard(a.id)" :disabled="!!decidingIds[a.id]">Approve <span class="kbd">A</span></button>
+                </footer>
+                <template x-if="denyingId === a.id">
+                  <div class="deny">
+                    <span class="deny__label">Deny reason</span>
+                    <textarea x-model="denyReason" autofocus
+                      @keydown.escape.stop="cancelDeny()"
+                      @keydown.meta.enter.stop="confirmDeny()"
+                      @keydown.ctrl.enter.stop="confirmDeny()"></textarea>
+                    <div class="deny__presets">
+                      <button class="deny__preset" @click.stop="denyReason = 'scope-creep'">scope-creep</button>
+                      <button class="deny__preset" @click.stop="denyReason = 'needs-human-check'">needs-human-check</button>
+                      <button class="deny__preset" @click.stop="denyReason = 'wrong-environment'">wrong-environment</button>
+                      <button class="deny__preset" @click.stop="denyReason = 'already-applied'">already-applied</button>
+                    </div>
+                    <div class="deny__actions">
+                      <span class="deny__hint">⌘⏎ confirm · esc cancel</span>
+                      <button class="btn btn--ghost" @click.stop="cancelDeny()">Cancel <span class="kbd">esc</span></button>
+                      <button class="btn btn--danger" @click.stop="confirmDeny()" :disabled="!denyReason.trim() || !!decidingIds[a.id]">Confirm deny <span class="kbd">⌘⏎</span></button>
+                    </div>
+                  </div>
+                </template>
+              </article>
+            </template>
+          </div>
+        </template>
+
+        <!-- =========== STATE: grouped =========== -->
+        <template x-if="state==='grouped'">
+          <div class="queue">
+            <template x-for="(g, gi) in groupedQueue" :key="g.id">
+              <div class="group">
+                <div class="group__head">
+                  <svg class="icon group__chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+                  <span class="group__id" x-text="g.id"></span>
+                  <span class="group__meta" x-text="g.pending + ' pending · started ' + g.started"></span>
+                  <span class="group__counts">
+                    <template x-for="c in g.counts" :key="c.level">
+                      <span class="group__count" :class="'group__count--' + c.level" x-text="c.n + ' ' + c.level"></span>
+                    </template>
+                  </span>
+                </div>
+                <div class="group__body">
+                  <template x-for="(a, i) in g.items" :key="a.id">
+                    <article class="card" :class="{'is-focused': gi===0 && i===0}" :data-risk="a.risk_level">
+                      <header class="card__head">
+                        <span class="risk" :class="'risk--' + a.risk_level" x-text="a.risk_level"></span>
+                        <span class="card__kind" x-text="a.kind"></span>
+                        <span class="mono auth-id" x-text="'#' + a.id"></span>
+                        <span class="mono" x-text="relativeTime(a.requested_at)"></span>
+                        <span class="spacer"></span>
+                        <span class="mono" style="color: var(--text-tertiary);" x-text="'timeout ' + a.timeout"></span>
+                      </header>
+                      <div class="card__op" x-text="a.operation"></div>
+                    </article>
+                  </template>
+                </div>
+              </div>
+            </template>
+          </div>
+        </template>
+
+        <!-- =========== STATE: deny-flow =========== -->
+        <template x-if="state==='deny-flow'">
+          <div class="queue">
+            <article class="card is-focused" data-risk="high">
+              <header class="card__head">
+                <span class="risk risk--high">high</span>
+                <span class="card__kind">cc_bash</span>
+                <span class="mono auth-id">#1249</span>
+                <span class="mono">38s ago</span>
+                <span class="spacer"></span>
+                <span class="mono" style="color: var(--text-tertiary);">s-def456</span>
+              </header>
+              <div class="card__op">sudo systemctl restart postgresql</div>
+              <div class="card__meta">
+                <span class="mono">beasty.local</span>
+                <span class="sep">·</span>
+                <span>may interrupt active queries</span>
+                <span class="sep">·</span>
+                <span class="card__timeout">timeout in 3m 22s</span>
+              </div>
+              <div class="deny">
+                <span class="deny__label">Deny reason</span>
+                <textarea autofocus>Not during business hours — schedule for 02:00 maintenance window.</textarea>
+                <div class="deny__presets">
+                  <button class="deny__preset">scope-creep</button>
+                  <button class="deny__preset">needs-human-check</button>
+                  <button class="deny__preset">wrong-environment</button>
+                  <button class="deny__preset">already-applied</button>
+                </div>
+                <div class="deny__actions">
+                  <span class="deny__hint">⌘⏎ confirm · esc cancel</span>
+                  <button class="btn btn--ghost">Cancel <span class="kbd">esc</span></button>
+                  <button class="btn btn--danger" style="color: var(--bg-primary); background: var(--risk-high); border-color: var(--risk-high);">Confirm deny <span class="kbd">⌘⏎</span></button>
+                </div>
+              </div>
+            </article>
+            <!-- two more cards behind it (dimmed) -->
+            <article class="card" data-risk="medium" style="opacity: 0.55;">
+              <header class="card__head">
+                <span class="risk risk--medium">medium</span>
+                <span class="card__kind">cc_file</span>
+                <span class="mono auth-id">#1250</span>
+                <span class="mono">1m ago</span>
+                <span class="spacer"></span>
+                <span class="mono" style="color: var(--text-tertiary);">s-def456</span>
+              </header>
+              <div class="card__op">write ~/.argos/argos-core/swarm-stack.yml</div>
+            </article>
+            <article class="card" data-risk="low" style="opacity: 0.55;">
+              <header class="card__head">
+                <span class="risk risk--low">low</span>
+                <span class="card__kind">cc_bash</span>
+                <span class="mono auth-id">#1252</span>
+                <span class="mono">1m 24s ago</span>
+                <span class="spacer"></span>
+                <span class="mono" style="color: var(--text-tertiary);">s-ghi012</span>
+              </header>
+              <div class="card__op">git status</div>
+            </article>
+          </div>
+        </template>
+
+        <!-- =========== STATE: drawer-open =========== -->
+        <template x-if="state==='drawer-open'">
+          <div style="height: 100%; display: flex;">
+            <div class="queue" style="flex: 1; overflow-y: auto;">
+              <template x-for="(a, i) in busyQueue.slice(0, 7)" :key="a.id">
+                <article class="card" :class="{'is-focused': focusedId !== null ? a.id === focusedId : i===0}" :data-risk="a.risk_level">
+                  <header class="card__head">
+                    <span class="risk" :class="'risk--' + a.risk_level" x-text="a.risk_level"></span>
+                    <span class="card__kind" x-text="a.kind"></span>
+                    <span class="mono auth-id" x-text="'#' + a.id"></span>
+                    <span class="mono" x-text="relativeTime(a.requested_at)"></span>
+                    <span class="spacer"></span>
+                    <span class="mono" style="color: var(--text-tertiary);" x-text="a.session"></span>
+                  </header>
+                  <div class="card__op" x-text="a.operation"></div>
+                </article>
+              </template>
+            </div>
+            <aside class="drawer">
+              <div class="drawer__head">
+                <span class="risk" :class="'risk--' + (drawerData ? drawerData.risk_level : 'medium')" x-text="drawerData ? drawerData.risk_level : '...'"></span>
+                <h2 class="drawer__title mono" x-text="drawerData ? '#' + drawerData.approval_id : '...'"></h2>
+                <span class="mono" style="color: var(--text-tertiary);" x-text="drawerData ? drawerData.kind : ''"></span>
+                <span class="spacer" style="flex:1;"></span>
+                <button class="btn btn--icon" @click.stop="closeDrawer()" title="Close (Esc)">
+                  <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                </button>
+              </div>
+              <div class="drawer__body">
+                <template x-if="!drawerData">
+                  <div style="padding: 2rem; text-align: center; color: var(--text-secondary);">Loading...</div>
+                </template>
+                <template x-if="drawerData">
+                  <div>
+                    <div>
+                      <div class="section-label">Operation</div>
+                      <pre class="json" x-text="drawerData.intent_text || '—'"></pre>
+                    </div>
+                    <div>
+                      <div class="section-label">Context</div>
+                      <dl class="kv">
+                        <dt>id</dt><dd x-text="drawerData.approval_id"></dd>
+                        <dt>kind</dt><dd x-text="drawerData.kind || '—'"></dd>
+                        <dt>status</dt><dd x-text="drawerData.status || '—'"></dd>
+                        <dt>session</dt><dd x-text="drawerData.session_id ? 's-' + drawerData.session_id : 'no session'"></dd>
+                        <dt>timeout</dt><dd x-text="drawerData.timeout_seconds ? drawerData.timeout_seconds + 's' : '—'"></dd>
+                        <dt>requested</dt><dd x-text="drawerData.requested_at || '—'"></dd>
+                        <dt>decided</dt><dd x-text="drawerData.decided_at || 'pending'"></dd>
+                        <dt>details</dt><dd x-text="drawerData.details || '—'"></dd>
+                      </dl>
+                    </div>
+                    <template x-if="drawerData.intent_json">
+                      <div>
+                        <div class="section-label">Intent (parsed)</div>
+                        <pre class="json" x-text="typeof drawerData.intent_json === 'object' ? JSON.stringify(drawerData.intent_json, null, 2) : drawerData.intent_json"></pre>
+                      </div>
+                    </template>
+                    <div>
+                      <div class="section-label">Session history</div>
+                      <pre class="json" style="color: var(--text-secondary);">session timeline TODO post-pas 7</pre>
+                    </div>
+                  </div>
+                </template>
+              </div>
+              <div class="drawer__actions">
+                <button class="btn btn--ghost">Postpone 10m</button>
+                <span class="spacer"></span>
+                <button class="btn btn--danger" @click.stop="drawerData && openDeny(drawerData.approval_id)" :disabled="!drawerData || !!decidingIds[drawerData.approval_id] || denyingId === drawerData.approval_id">Deny <span class="kbd">D</span></button>
+                <button class="btn btn--primary" @click.stop="drawerData && approveCard(drawerData.approval_id)" :disabled="!drawerData || !!decidingIds[drawerData.approval_id]">Approve <span class="kbd">A</span></button>
+              </div>
+            </aside>
+          </div>
+        </template>
+
+        <!-- =========== STATE: disconnected =========== -->
+        <template x-if="!connected">
+          <div class="queue">
+            <template x-for="(a, i) in busyQueue.slice(0, 6)" :key="a.id">
+              <article class="card" :data-risk="a.risk_level">
+                <header class="card__head">
+                  <span class="risk" :class="'risk--' + a.risk_level" x-text="a.risk_level"></span>
+                  <span class="card__kind" x-text="a.kind"></span>
+                  <span class="mono auth-id" x-text="'#' + a.id"></span>
+                  <span class="mono" x-text="relativeTime(a.requested_at)"></span>
+                  <span class="spacer"></span>
+                  <span class="card__stale">stale 14s</span>
+                </header>
+                <div class="card__op" x-text="a.operation"></div>
+                <div class="card__meta">
+                  <span class="mono" x-text="a.host"></span>
+                  <span class="sep">·</span>
+                  <span style="color: var(--text-tertiary);">decisions disabled until reconnect</span>
+                </div>
+              </article>
+            </template>
+          </div>
+        </template>
+
+        <!-- =========== STATE: filtered =========== -->
+        <template x-if="state==='filtered'">
+          <div class="queue">
+            <div style="padding: var(--s-2) var(--s-3); background: var(--bg-elevated); border: 1px solid var(--border-subtle); border-radius: var(--r-sm); display: flex; gap: var(--s-2); align-items: center; font-size: var(--fs-12); color: var(--text-secondary);">
+              <span>Filters:</span>
+              <span class="risk risk--high" style="font-size: 10px;">high</span>
+              <span class="risk risk--critical" style="font-size: 10px;">critical</span>
+              <span class="card__kind">cc_bash</span>
+              <span style="color: var(--text-tertiary);">matches "rm"</span>
+              <span class="spacer" style="flex:1;"></span>
+              <span class="mono" style="color: var(--text-tertiary);">4 of 12 shown</span>
+              <button class="btn btn--icon" title="Clear filters">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+              </button>
+            </div>
+            <template x-for="(a, i) in filteredQueue" :key="a.id">
+              <article class="card" :class="{'is-focused': focusedId !== null ? a.id === focusedId : i===0}" :data-risk="a.risk_level">
+                <header class="card__head">
+                  <span class="risk" :class="'risk--' + a.risk_level" x-text="a.risk_level"></span>
+                  <span class="card__kind" x-text="a.kind"></span>
+                  <span class="mono auth-id" x-text="'#' + a.id"></span>
+                  <span class="mono" x-text="relativeTime(a.requested_at)"></span>
+                  <span class="spacer"></span>
+                  <span class="mono" style="color: var(--text-tertiary);" x-text="a.session"></span>
+                </header>
+                <div class="card__op" x-text="a.operation"></div>
+                <div class="card__meta">
+                  <span class="mono" x-text="a.host"></span>
+                  <span class="sep">·</span>
+                  <span x-text="a.intent"></span>
+                  <span class="sep">·</span>
+                  <span class="card__timeout" x-text="'timeout in ' + a.timeout"></span>
+                </div>
+              </article>
+            </template>
+          </div>
+        </template>
+
+        <!-- =========== STATE: palette-open (queue behind palette) =========== -->
+        <template x-if="state==='palette-open'">
+          <div class="queue">
+            <template x-for="(a, i) in busyQueue.slice(0, 5)" :key="a.id">
+              <article class="card" :data-risk="a.risk_level" style="opacity: 0.4;">
+                <header class="card__head">
+                  <span class="risk" :class="'risk--' + a.risk_level" x-text="a.risk_level"></span>
+                  <span class="card__kind" x-text="a.kind"></span>
+                  <span class="mono auth-id" x-text="'#' + a.id"></span>
+                  <span class="mono" x-text="relativeTime(a.requested_at)"></span>
+                </header>
+                <div class="card__op" x-text="a.operation"></div>
+              </article>
+            </template>
+          </div>
+        </template>
+
+      </div>
+    </main>
+
+    <!-- RAIL (Now) -->
+    <aside class="rail">
+      <div class="rail__head">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="color: var(--accent);"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+        <span class="rail__title">Now</span>
+        <span class="spacer" style="flex: 1;"></span>
+        <span class="dot" :class="connected ? 'dot--ok dot--pulse' : 'dot--error'"></span>
+        <span class="mono" style="color: var(--text-tertiary); font-size: var(--fs-11);" x-text="connected ? 'live' : 'paused'"></span>
+      </div>
+      <div class="rail__body">
+        <template x-for="item in feed" :key="item.t + item.title">
+          <div class="feed-item" :class="'feed-item--' + item.kind">
+            <span class="feed-item__time" x-text="item.t"></span>
+            <div class="feed-item__body">
+              <div class="feed-item__title" x-text="item.title"></div>
+              <div class="feed-item__sub" x-text="item.sub"></div>
+            </div>
+          </div>
+        </template>
+      </div>
+    </aside>
+
+    <!-- STATUSBAR -->
+    <footer class="statusbar">
+      <span class="seg-group"><span class="dot dot--ok"></span><span class="label">swarm:</span><span>2/2</span></span>
+      <span class="seg-group"><span class="dot dot--ok"></span><span class="label">db:</span><span>OK</span></span>
+      <span class="seg-group"><span class="dot" :class="connected ? 'dot--ok' : 'dot--error'"></span><span class="label">hb:</span><span x-text="connected ? '4s' : '14s'"></span></span>
+      <span class="seg-group"><span class="label">tick:</span><span>1m12s ago</span></span>
+      <span class="seg-group">
+        <span class="dot" :class="connected ? 'dot--idle' : 'dot--error'"></span>
+        <span class="label">errors:</span><span x-text="connected ? '0' : '1'"></span>
+      </span>
+      <span class="spacer"></span>
+      <span class="label">argos v0.7.0 · build abc123 · claude-code 2.1.119</span>
+    </footer>
+
+  </div>
+
+  <!-- ============================================================
+       OVERLAYS
+       ============================================================ -->
+
+  <!-- CRITICAL MODAL -->
+  <template x-if="state==='single-critical'">
+    <div class="modal-backdrop" @click.self="">
+      <div class="modal" role="dialog" aria-labelledby="m-t">
+        <div class="modal__head">
+          <span class="modal__badge">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 18px; height: 18px;"><path d="M12 9v4m0 4h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/></svg>
+          </span>
+          <div>
+            <h2 id="m-t" class="modal__title">Critical approval — destructive operation</h2>
+            <div class="modal__sub">Auth <span class="mono">#1251</span> · session <span class="mono">s-xyz789</span> · beasty.local</div>
+          </div>
+        </div>
+        <div class="modal__body">
+          <div>
+            <div class="section-label">Requested operation</div>
+            <pre class="json" style="border-color: color-mix(in oklch, var(--risk-critical) 40%, transparent);">rm -rf /var/log/argos/*.log</pre>
+          </div>
+          <div>
+            <div class="section-label">Blast radius</div>
+            <dl class="kv">
+              <dt>kind</dt><dd>cc_bash · requires root</dd>
+              <dt>target</dt><dd>/var/log/argos/*.log (18 files, ~2.4 GiB)</dd>
+              <dt>reversible</dt><dd style="color: var(--risk-critical);">false — deletion is permanent</dd>
+              <dt>precedents</dt><dd>none from this session</dd>
+            </dl>
+          </div>
+          <div style="font-size: var(--fs-12); color: var(--text-secondary); padding: var(--s-3); border-left: 2px solid var(--risk-critical); background: var(--risk-critical-bg);">
+            Agent claims intent: "free disk before postgres dump". No logrotate policy found — review before approving.
+          </div>
+        </div>
+        <div class="modal__foot">
+          <span class="hint">Esc acknowledges but card stays highlighted.</span>
+          <span class="spacer"></span>
+          <button class="btn btn--ghost">Review later <span class="kbd">esc</span></button>
+          <button class="btn btn--danger" @click.stop="openDeny(a.id)" :disabled="!!decidingIds[a.id] || denyingId === a.id">Deny <span class="kbd">D</span></button>
+          <button class="btn" style="background: var(--risk-critical); color: white; font-weight: 600;">Approve <span class="kbd">⌘⏎</span></button>
+        </div>
+      </div>
+    </div>
+  </template>
+
+  <!-- COMMAND PALETTE -->
+  <template x-if="state==='palette-open'">
+    <div class="palette-backdrop" @click.self="state='busy'">
+      <div class="palette" role="dialog">
+        <input x-model="paletteQuery" @keydown.escape.stop="closePalette()" class="palette__input" type="text" value="approve" autofocus placeholder="Search or run command…">
+
+        <template x-for="(a, i) in paletteResults" :key="i">
+          <div class="palette__item" :class="{'is-active': i === paletteSelectedIdx}" @click="runPaletteAction(i)">
+            <span x-text="a.label"></span>
+            <span class="spacer"></span>
+            <span class="meta" x-text="a.hint"></span>
+          </div>
+        </template>
+                <div class="palette__foot">
+          <span class="hint"><span class="kbd">↑↓</span> navigate</span>
+          <span class="hint"><span class="kbd">⏎</span> run</span>
+          <span class="hint"><span class="kbd">esc</span> close</span>
+          <span class="spacer" style="flex:1;"></span>
+          <span class="mono" style="color: var(--text-disabled);" x-text="paletteResults.length + ' matches'"></span>
+        </div>
+      </div>
+    </div>
+  </template>
+
+
+
+
+</div>
+
+<script src="https://unpkg.com/alpinejs@3.14.1/dist/cdn.min.js" defer></script>
+<script>
+
+function app() {
+  return {
+    // --- core ---
+    state: 'busy',
+    connected: false,
+    _reconnectDelay: 1000,
+    _reconnectTimer: null,
+    _es: null,
+    helloBootstrap: null,
+    warningDismissed: false,
+    decidingIds: {},
+    denyingId: null,
+    denyReason: '',
+    focusedId: null,
+    activeFilters: { risk: [], kind: [] },
+    paletteQuery: '',
+    paletteSelectedIdx: 0,
+    drawerData: null,
+
+    // --- tweak knobs ---
+
+    init() {
+
+      window.addEventListener('keydown', (e) => this.onGlobalKey(e));
+      this.$watch('paletteQuery', () => { this.paletteSelectedIdx = 0; });
+
+      this.connectStream();
+    },
+
+    connectStream() {
+      // Bootstrap o data la init, NU la reconnect (issue #209)
+      if (!this._bootstrapped) {
+        this._bootstrapped = true;
+        fetch('/api/claude-code/approvals?status=pending&limit=50')
+          .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+          .then(data => {
+            // Map approval-status schema la busyQueue card schema
+            // Defaults pentru fields care vin din drawer GET la pas 4c
+            const cards = data.approvals.map(a => ({
+              id: a.approval_id,
+              kind: a.kind || '',
+              operation: a.intent_text,
+              risk_level: a.risk_level,
+              requested_at: a.requested_at,
+              details: a.details || '',
+              host: '',
+              session: a.session_id ? 's-' + a.session_id : '',
+              intent: '',
+              timeout: ''
+            }));
+            // Dedupe vs existing busyQueue (in caz ca SSE auth_pending a venit deja)
+            const existing = new Set(this.busyQueue.map(a => a.id));
+            const newCards = cards.filter(c => !existing.has(c.id));
+            this.busyQueue = [...this.busyQueue, ...newCards];
+            console.log('[bootstrap] loaded', data.total, 'pending,', newCards.length, 'added');
+          })
+          .catch(err => console.error('[bootstrap] failed:', err));
+      }
+      if (this._reconnectTimer) {
+        clearTimeout(this._reconnectTimer);
+        this._reconnectTimer = null;
+      }
+      if (this._es) {
+        try { this._es.close(); } catch (e) { /* ignore */ }
+      }
+      this._es = new EventSource('/api/stream/activity');
+
+      this._es.onopen = () => {
+        this.connected = true;
+        this._reconnectDelay = 1000;
+        console.log('[SSE] connected');
+      };
+
+      this._es.onerror = () => {
+        if (this._reconnectTimer) return;
+        this.connected = false;
+        try { this._es.close(); } catch (e) { /* ignore */ }
+        const base = this._reconnectDelay;
+        const jitter = base * (0.8 + Math.random() * 0.4);
+        this._reconnectDelay = Math.min(base * 2, 30000);
+        console.log(`[SSE] reconnecting in ${Math.round(jitter)}ms (next cap ${this._reconnectDelay}ms)`);
+        this._reconnectTimer = setTimeout(() => {
+          this._reconnectTimer = null;
+          this.connectStream();
+        }, jitter);
+      };
+
+      // Approvals events. Placeholder logging at 3b - populate UI at 3c-3e.
+      // heartbeat/heartbeat_summary/tick NOT listened = ignored by EventSource.
+      this._es.addEventListener('hello', (e) => {
+        const data = JSON.parse(e.data);
+        this.helloBootstrap = data;
+        console.log('[SSE hello]', data);
+      });
+      this._es.addEventListener('auth_pending', (e) => {
+        const data = JSON.parse(e.data);
+        // Dedupe: skip daca exista in busyQueue (din bootstrap GET sau previous event)
+        if (this.busyQueue.some(a => a.id === data.id)) {
+          console.log('[SSE auth_pending] duplicate skip', data.id);
+          return;
+        }
+        // Defaults pentru fields care lipsesc in event (kind/host/session/intent/timeout)
+        // - vin din drawer GET la pas 4. Defaults evita render "undefined" in HTML.
+        const card = Object.assign({
+          kind: '', host: '', session: '', intent: '', timeout: ''
+        }, data);
+        this.busyQueue.unshift(card);
+        console.log('[SSE auth_pending]', data);
+      });
+      this._es.addEventListener('auth_decided', (e) => {
+        const data = JSON.parse(e.data);
+        this.busyQueue = this.busyQueue.filter(a => a.id !== data.id);
+        delete this.decidingIds[data.id];
+        if (this.focusedId === data.id) {
+          this.focusedId = this.busyQueue.length > 0 ? this.busyQueue[0].id : null;
+        }
+        if (this.denyingId === data.id) {
+          this.denyingId = null;
+          this.denyReason = '';
+        }
+        if (this.state === 'drawer-open' && this.drawerData && this.drawerData.approval_id === data.id) {
+          this.closeDrawer();
+        }
+        console.log('[SSE auth_decided]', data);
+      });
+      this._es.addEventListener('error', (e) => {
+        if (!e.data) return; // native EventSource error (handled by onerror)
+        try {
+          const data = JSON.parse(e.data);
+          console.log('[SSE error]', data);
+        } catch (err) { /* ignore non-JSON */ }
+      });
+    },
+    moduleSubtitle() {
+      if (!this.connected) return 'queue frozen - reconnecting';
+      const n = this.busyQueue.length;
+      if (n === 0) return 'no pending';
+      return n + ' pending - newest first';
+    },
+    queueCountDisplay() {
+      return String(this.busyQueue.length);
+    },
+    isFilterChecked(cat, val) {
+      return this.activeFilters[cat].includes(val);
+    },
+    toggleFilter(cat, val) {
+      const arr = this.activeFilters[cat];
+      const idx = arr.indexOf(val);
+      if (idx === -1) arr.push(val);
+      else arr.splice(idx, 1);
+    },
+
+    openPalette() {
+      this.state = 'palette-open';
+      this.paletteQuery = '';
+      this.paletteSelectedIdx = 0;
+      this.$nextTick(() => {
+        const i = document.querySelector('.palette__input');
+        if (i) i.focus();
+      });
+    },
+
+    closePalette() {
+      this.state = 'busy';
+      this.paletteQuery = '';
+    },
+
+    runPaletteAction(idx) {
+      const r = this.paletteResults;
+      if (idx < 0 || idx >= r.length) return;
+      const a = r[idx];
+      this.closePalette();
+      this.$nextTick(() => a.run());
+    },
+
+    openDrawer(id) {
+      this.drawerData = null;
+      this.state = 'drawer-open';
+      fetch('/api/claude-code/approval-status/' + id)
+        .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+        .then(data => {
+          if (typeof data.intent_json === 'string') {
+            try { data.intent_json = JSON.parse(data.intent_json); } catch (_) {}
+          }
+          this.drawerData = data;
+        })
+        .catch(err => {
+          console.error('[drawer] failed:', err);
+          this.state = 'busy';
+          alert('Failed to load details: ' + err.message);
+        });
+    },
+    closeDrawer() {
+      this.state = 'busy';
+      this.drawerData = null;
+    },
+    get paletteActions() {
+      return [
+        { label: 'Approve focused card', hint: 'approve currently focused', run: () => {
+          const id = this.focusedId !== null ? this.focusedId : (this.busyQueue[0] ? this.busyQueue[0].id : null);
+          if (id) this.approveCard(id);
+        }},
+        { label: 'Deny focused card', hint: 'open deny textarea for focused', run: () => {
+          const id = this.focusedId !== null ? this.focusedId : (this.busyQueue[0] ? this.busyQueue[0].id : null);
+          if (id) this.openDeny(id);
+        }},
+        { label: 'Approve all low risk', hint: 'batch approve all low cards', run: () => this.approveAllLow() },
+        { label: 'Filter: high + critical', hint: 'show only high+critical', run: () => { this.activeFilters.risk = ['high', 'critical']; this.activeFilters.kind = []; }},
+        { label: 'Filter: critical only', hint: 'show only critical', run: () => { this.activeFilters.risk = ['critical']; this.activeFilters.kind = []; }},
+        { label: 'Clear all filters', hint: 'reset risk and kind filters', run: () => { this.activeFilters.risk = []; this.activeFilters.kind = []; }}
+      ];
+    },
+
+    get paletteResults() {
+      const q = this.paletteQuery.trim().toLowerCase();
+      if (!q) return this.paletteActions;
+      return this.paletteActions.filter(a => a.label.toLowerCase().includes(q) || a.hint.toLowerCase().includes(q));
+    },
+
+    filterCount(cat, val) {
+      if (cat === 'risk') {
+        return this.busyQueue.filter(a => a.risk_level === val).length;
+      }
+      if (cat === 'kind') {
+        // kind lipseste in auth_pending event - vine din drawer GET la pas 4
+        return '—';
+      }
+      return 0;
+    },
+
+    relativeTime(iso) {
+      if (!iso) return '';
+      const t = new Date(iso).getTime();
+      if (isNaN(t)) return '';
+      const dt = (Date.now() - t) / 1000;
+      if (dt < 60)    return Math.floor(dt) + 's ago';
+      if (dt < 3600)  return Math.floor(dt / 60) + 'm ago';
+      if (dt < 86400) return Math.floor(dt / 3600) + 'h ago';
+      return Math.floor(dt / 86400) + 'd ago';
+    },
+
+    _isTypingTarget(evt) {
+      const t = evt.target;
+      return t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
+    },
+
+    focusNext() {
+      if (this.busyQueue.length === 0) { this.focusedId = null; return; }
+      const idx = this.busyQueue.findIndex(a => a.id === this.focusedId);
+      const next = (idx === -1 || idx === this.busyQueue.length - 1) ? 0 : idx + 1;
+      this.focusedId = this.busyQueue[next].id;
+    },
+
+    focusPrev() {
+      if (this.busyQueue.length === 0) { this.focusedId = null; return; }
+      const idx = this.busyQueue.findIndex(a => a.id === this.focusedId);
+      const prev = (idx <= 0) ? this.busyQueue.length - 1 : idx - 1;
+      this.focusedId = this.busyQueue[prev].id;
+    },
+
+    onGlobalKey(evt) {
+      const k = evt.key;
+      if ((evt.ctrlKey || evt.metaKey) && (k === 'k' || k === 'K')) {
+        this.openPalette(); evt.preventDefault(); return;
+      }
+      if (k === 'Escape' && this.state === 'drawer-open') {
+        this.closeDrawer(); evt.preventDefault(); return;
+      }
+      if (k === 'Enter' && this.state === 'busy' && this.focusedId !== null) {
+        this.openDrawer(this.focusedId); evt.preventDefault(); return;
+      }
+      if (k === 'Escape' && this.state === 'palette-open') {
+        this.closePalette(); evt.preventDefault(); return;
+      }
+      if (k === 'Enter' && this.state === 'palette-open') {
+        this.runPaletteAction(this.paletteSelectedIdx); evt.preventDefault(); return;
+      }
+      if (this._isTypingTarget(evt)) return;
+      if (k === 'ArrowDown' && this.state === 'palette-open') {
+        e.preventDefault();
+        this.paletteSelectedIdx = Math.min(this.paletteSelectedIdx + 1, this.paletteResults.length - 1);
+        return;
+      }
+      if (k === 'ArrowUp' && this.state === 'palette-open') {
+        e.preventDefault();
+        this.paletteSelectedIdx = Math.max(this.paletteSelectedIdx - 1, 0);
+        return;
+      }
+      if (this.state === 'palette-open') return;
+      const id = this.focusedId !== null ? this.focusedId : (this.busyQueue[0] ? this.busyQueue[0].id : null);
+      if (k === 'a' || k === 'A') {
+        if (id) { this.approveCard(id); evt.preventDefault(); }
+      } else if (k === 'd' || k === 'D') {
+        if (id) { this.openDeny(id); evt.preventDefault(); }
+      } else if (k === 'j' || k === 'J') {
+        this.focusNext(); evt.preventDefault();
+      } else if (k === 'k' || k === 'K') {
+        this.focusPrev(); evt.preventDefault();
+      }
+    },
+
+    approveAllLow() {
+      const targets = this.busyQueue.filter(a =>
+        a.risk_level === 'low' && !this.decidingIds[a.id]
+      );
+      if (targets.length === 0) {
+        console.log('[approve-all-low] no low-risk cards to approve');
+        return;
+      }
+      console.log('[approve-all-low] approving', targets.length, 'cards');
+      // Optimistic: marcheaza toate in flight
+      targets.forEach(a => { this.decidingIds[a.id] = true; });
+      // Parallel POST decide
+      Promise.allSettled(
+        targets.map(a =>
+          fetch('/api/claude-code/approval/' + a.id + '/decide', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ decision: 'approved', reason: 'auto: approve-all-low' })
+          }).then(r => {
+            if (!r.ok) return r.text().then(t => { throw new Error('HTTP ' + r.status + ': ' + t); });
+            return r.json();
+          })
+        )
+      ).then(results => {
+        const ok = results.filter(r => r.status === 'fulfilled').length;
+        const fail = results.filter(r => r.status === 'rejected').length;
+        console.log('[approve-all-low] done:', ok, 'OK,', fail, 'failed');
+        // Cleanup decidingIds pentru failed (auth_decided event va cleanup pentru OK)
+        if (fail > 0) {
+          targets.forEach((a, i) => {
+            if (results[i].status === 'rejected') {
+              delete this.decidingIds[a.id];
+              console.error('[approve-all-low] failed #' + a.id, results[i].reason);
+            }
+          });
+          alert('approve-all-low: ' + fail + ' failed (see console)');
+        }
+      });
+    },
+
+    approveCard(id) {
+      if (this.decidingIds[id]) return; // already in flight
+      this.decidingIds[id] = true;
+      fetch('/api/claude-code/approval/' + id + '/decide', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ decision: 'approved', reason: null })
+      })
+      .then(r => {
+        if (!r.ok) return r.text().then(t => { throw new Error('HTTP ' + r.status + ': ' + t); });
+        return r.json();
+      })
+      .then(data => {
+        console.log('[approve OK]', data);
+        // auth_decided event va remove cardul si va sterge decidingIds[id]
+      })
+      .catch(err => {
+        console.error('[approve FAIL]', id, err);
+        delete this.decidingIds[id];
+        // TODO pas 3e: route prin error banner. Brutal alert pentru moment:
+        alert('Approve #' + id + ' failed: ' + err.message);
+      });
+    },
+
+    openDeny(id) {
+      if (this.decidingIds[id]) return;
+      this.denyingId = id;
+      this.denyReason = '';
+    },
+
+    cancelDeny() {
+      this.denyingId = null;
+      this.denyReason = '';
+    },
+
+    confirmDeny() {
+      const id = this.denyingId;
+      const reason = this.denyReason.trim();
+      if (!id || !reason) return;
+      if (this.decidingIds[id]) return;
+      this.decidingIds[id] = true;
+      fetch('/api/claude-code/approval/' + id + '/decide', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ decision: 'denied', reason: reason })
+      })
+      .then(r => {
+        if (!r.ok) return r.text().then(t => { throw new Error('HTTP ' + r.status + ': ' + t); });
+        return r.json();
+      })
+      .then(data => {
+        console.log('[deny OK]', data);
+      })
+      .catch(err => {
+        console.error('[deny FAIL]', id, err);
+        delete this.decidingIds[id];
+        alert('Deny #' + id + ' failed: ' + err.message);
+      });
+    },
+
+    // --- mock data ---
+    busyQueue: [],
+
+    get groupedQueue() {
+      const groups = { 's-abc123': [], 's-def456': [], 's-xyz789': [], 's-cron01': [] };
+      for (const a of this.busyQueue) (groups[a.session] ||= []).push(a);
+      const meta = {
+        's-abc123': { started: '14m ago', hint: '' },
+        's-def456': { started: '8m ago',  hint: '' },
+        's-xyz789': { started: '30s ago', hint: '' },
+        's-cron01': { started: '3m ago',  hint: '' },
+      };
+      return Object.entries(groups).filter(([, items]) => items.length).map(([id, items]) => {
+        const counts = ['low', 'medium', 'high', 'critical']
+          .map(level => ({ level, n: items.filter(i => i.risk === level).length }))
+          .filter(c => c.n > 0);
+        return { id, items, pending: items.length, started: meta[id].started, counts };
+      });
+    },
+
+    get filteredQueue() {
+      const filters = this.activeFilters;
+      const noRisk = filters.risk.length === 0;
+      const noKind = filters.kind.length === 0;
+      if (noRisk && noKind) return this.busyQueue;
+      return this.busyQueue.filter(a => {
+        const okRisk = noRisk || filters.risk.includes(a.risk_level);
+        const okKind = noKind || filters.kind.includes(a.kind);
+        return okRisk && okKind;
+      });
+    },
+
+    feed: [
+      { t: '2s',    kind: 'critical', title: 'auth_pending #1251',  sub: 'rm -rf · s-xyz789' },
+      { t: '38s',   kind: 'pending',  title: 'auth_pending #1249',  sub: 'systemctl restart · s-def456' },
+      { t: '1m',    kind: 'pending',  title: 'auth_pending #1250',  sub: 'write swarm-stack.yml' },
+      { t: '2m',    kind: 'approved', title: 'auth_decided #1248',  sub: 'approved · cron stale-sweep' },
+      { t: '2m',    kind: 'pending',  title: 'auth_pending #1248',  sub: 'UPDATE authorizations…' },
+      { t: '2m',    kind: 'approved', title: 'auth_decided #1247',  sub: 'approved · ls /tmp/' },
+      { t: '3m',    kind: 'approved', title: 'auth_decided #1246',  sub: 'approved · git status' },
+      { t: '3m',    kind: 'denied',   title: 'auth_decided #1245',  sub: 'denied · "schedule maint window"' },
+      { t: '3m',    kind: 'info',     title: 'heartbeat_summary',   sub: 'swarm 2/2 · db OK · 4s' },
+      { t: '4m',    kind: 'approved', title: 'auth_decided #1244',  sub: 'approved · write demo.html' },
+      { t: '4m',    kind: 'approved', title: 'auth_decided #1243',  sub: 'approved · web_fetch' },
+      { t: '4m',    kind: 'info',     title: 'tick',                sub: 'queue depth: 12 pending' },
+      { t: '4m',    kind: 'approved', title: 'auth_decided #1242',  sub: 'approved · cat nginx.conf' },
+      { t: '5m',    kind: 'approved', title: 'auth_decided #1241',  sub: 'approved · psql count' },
+      { t: '5m',    kind: 'info',     title: 'hello',               sub: 'SSE connected · bootstrap 12' },
+      { t: '5m',    kind: 'approved', title: 'auth_decided #1240',  sub: 'auto-approved · tail log' },
+    ],
+
+    // --- tweaks ---
+  };
+}
+</script>
+</body>
+</html>

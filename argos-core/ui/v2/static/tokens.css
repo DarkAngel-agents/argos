@@ -1,0 +1,81 @@
+/* ARGOS UI v2 - design tokens (auto-extracted from demo.html, pas 1 faza 2) */
+/* ── Self-hosted fonts (task #206) ── */
+@font-face {
+  font-family: 'Geist';
+  src: url('../static/fonts/Geist.woff2') format('woff2');
+  font-weight: 100 900;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Geist Mono';
+  src: url('../static/fonts/GeistMono.woff2') format('woff2');
+  font-weight: 100 900;
+  font-display: swap;
+}
+
+:root {
+  --bg-primary:     #0b0e14;
+  --bg-elevated:    #141923;
+  --bg-hover:       #1c2230;
+  --bg-sunken:      #070a10;
+  --border-subtle:  #262d3a;
+  --border-strong:  #3a4252;
+
+  --text-primary:   #e6edf3;
+  --text-secondary: #9da7b8;
+  --text-tertiary:  #6b7486;
+  --text-disabled:  #4a5264;
+
+  --accent:         #c49a6c;
+  --accent-hover:   #d4ae84;
+  --accent-active:  #a47c50;
+  --accent-dim:     #c49a6c33;
+
+  --risk-low:       #7aaa6a;
+  --risk-medium:    #d4a054;
+  --risk-high:      #e06c4f;
+  --risk-critical:  #c73e2b;
+
+  --risk-low-bg:        #7aaa6a1a;
+  --risk-medium-bg:     #d4a0541a;
+  --risk-high-bg:       #e06c4f1a;
+  --risk-critical-bg:   #c73e2b1a;
+
+  --status-ok:      #7aaa6a;
+  --status-warn:    #d4a054;
+  --status-error:   #e06c4f;
+  --status-idle:    #6b7486;
+
+  --font-sans: "Geist", "Geist Sans", system-ui, -apple-system, sans-serif;
+  --font-mono: "Geist Mono", "JetBrains Mono", ui-monospace, monospace;
+
+  --fs-11: 11px; --fs-12: 12px; --fs-13: 13px;
+  --fs-14: 14px; --fs-16: 16px; --fs-20: 20px; --fs-24: 24px;
+
+  --s-1: 4px; --s-2: 8px; --s-3: 12px; --s-4: 16px;
+  --s-5: 20px; --s-6: 24px; --s-8: 32px; --s-10: 40px;
+  --s-12: 48px; --s-16: 64px;
+
+  --r-sm: 4px; --r-md: 6px; --r-lg: 10px; --r-pill: 999px;
+
+  --elev-3: 0 0 0 1px var(--border-strong), 0 8px 24px -12px #0000007a;
+  --elev-modal: 0 0 0 1px var(--border-strong), 0 32px 64px -16px #000000a0;
+
+  --focus-ring: 0 0 0 2px var(--bg-primary), 0 0 0 4px var(--accent);
+
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --dur-fast: 100ms; --dur-base: 160ms; --dur-slow: 220ms;
+
+  --h-topbar: 48px;
+  --h-statusbar: 28px;
+  --w-sidebar: 200px;
+  --w-rail: 280px;
+  --w-drawer: 480px;
+
+  /* Knobs (tweakables) */
+  --card-pad-v: 14px;
+  --card-pad-h: 16px;
+  --card-gap: 12px;
+  --rail-width: 280px;
+  --risk-strip: 2px;
+}
