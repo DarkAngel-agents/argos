@@ -10,6 +10,7 @@ import os
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional
+from api.ssh_util import known_hosts as _ssh_known_hosts
 
 router = APIRouter()
 
@@ -156,7 +157,7 @@ async def rollback_file(pool, module_name: str, version_type: str = "previous") 
 
         # Restart serviciu daca e nevoie
         restart_result = ""
-        async with asyncssh.connect("11.11.11.111", username="darkangel", client_keys=[SSH_KEY], known_hosts=None) as conn:
+        async with asyncssh.connect("11.11.11.111", username="darkangel", client_keys=[SSH_KEY], known_hosts=_ssh_known_hosts()) as conn:
             r = await conn.run("sudo systemctl restart argos", timeout=30)
             restart_result = f"rc={r.exit_status}"
 
@@ -184,7 +185,7 @@ async def auto_rollback_if_broken(pool, module_name: str) -> dict:
     # Verifica serviciul
     check_target, check_cmd = SERVICE_CHECKS.get(module_name, SERVICE_CHECKS["default"])
     try:
-        async with asyncssh.connect("11.11.11.111", username="darkangel", client_keys=[SSH_KEY], known_hosts=None) as conn:
+        async with asyncssh.connect("11.11.11.111", username="darkangel", client_keys=[SSH_KEY], known_hosts=_ssh_known_hosts()) as conn:
             r = await conn.run(check_cmd, timeout=30)
             if r.exit_status == 0 and "active" in (r.stdout or ""):
                 return {"status": "ok", "service": "running"}

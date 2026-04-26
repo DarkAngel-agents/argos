@@ -9,6 +9,7 @@ import asyncio
 import asyncssh
 from fastapi import APIRouter, HTTPException, Request
 from api.rate_limit import limiter
+from api.ssh_util import known_hosts as _ssh_known_hosts
 from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime
@@ -92,7 +93,7 @@ async def _ssh(host: str, user: str, command: str, timeout: int = 30) -> dict:
     try:
         async with asyncssh.connect(
             host, username=user, client_keys=[SSH_KEY],
-            known_hosts=None, connect_timeout=10
+            known_hosts=_ssh_known_hosts(), connect_timeout=10
         ) as conn:
             r = await conn.run(command, timeout=timeout)
             return {

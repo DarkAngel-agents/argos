@@ -56,6 +56,13 @@ DB_CONF = {
 }
 
 SSH_KEY = os.path.expanduser("~/.ssh/id_ed25519")
+
+# Audit N10: prefer ~/.ssh/known_hosts when populated, else degrade to None
+# (skip verification) — matches api/ssh_util.py policy. Subprocess can't
+# import the shared helper without extra wiring, so we inline equivalent.
+_KH_PATH = os.path.expanduser("~/.ssh/known_hosts")
+_KNOWN_HOSTS = _KH_PATH if (os.path.exists(_KH_PATH) and os.path.getsize(_KH_PATH) > 0) else None
+
 RESULTS = []
 
 async def ssh(host: str, user: str, command: str, timeout: int = 30) -> dict:
@@ -77,7 +84,7 @@ async def ssh(host: str, user: str, command: str, timeout: int = 30) -> dict:
     try:
         async with asyncssh.connect(
             host, username=user, client_keys=[SSH_KEY],
-            known_hosts=None, connect_timeout=10
+            known_hosts=_KNOWN_HOSTS, connect_timeout=10
         ) as conn:
             r = await conn.run(command, timeout=timeout)
             return {"ok": True, "stdout": r.stdout.strip(), "stderr": r.stderr.strip(), "rc": r.exit_status}

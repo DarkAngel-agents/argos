@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime
+from api.ssh_util import known_hosts as _ssh_known_hosts
 
 router = APIRouter()
 
@@ -232,7 +233,7 @@ async def _exec_ssh(host: str, user: str, command: str) -> dict:
         async with asyncssh.connect(
             host, username=user,
             client_keys=[SSH_KEY],
-            known_hosts=None,
+            known_hosts=_ssh_known_hosts(),
             connect_timeout=10
         ) as conn:
             result = await conn.run(command, timeout=timeout)
