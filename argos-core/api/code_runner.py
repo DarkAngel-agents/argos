@@ -1,16 +1,44 @@
 """
 Programmatic Tool Calling - ruleaza cod Python generat de Claude
-intr-un subprocess izolat cu acces la tool-urile Argos
+intr-un subprocess izolat cu acces la tool-urile Argos.
+
+SECURITY (audit C2):
+- This module exposes NO HTTP endpoint. Do NOT add @router or @app decorators
+  here. The only caller is api/chat.py via the LLM tool-dispatch path, reached
+  from POST /api/messages, which is auth-gated via _AUTH in main.py.
+- run_code() runs arbitrary Python in a subprocess with DB + SSH key access.
+  The agent legitimately needs that power. Guardrails: timeout (RUNNER_TIMEOUT)
+  + audit logging of suspicious string patterns (see _scan_code_security).
 """
 import asyncio
 import os
 import sys
 import json
+import hashlib
 import tempfile
 import subprocess
 from typing import Optional
 
 RUNNER_TIMEOUT = 120  # secunde
+
+# Patterns flagged for audit logging when found in submitted code. The log is
+# advisory only — the agent loop sometimes legitimately needs these primitives.
+# Goal: forensic trail for "what did the LLM ask to run?" without blocking.
+_SECURITY_PATTERNS = (
+    "os.system",
+    "subprocess",
+    "__import__",
+    'open("/etc',
+    "open('/etc",
+    "/root/",
+    "/home/",
+    "ssh",
+)
+
+
+def _scan_code_security(code: str) -> list:
+    """Return list of suspicious substrings found in submitted code."""
+    return [p for p in _SECURITY_PATTERNS if p in code]
 
 RUNNER_PREAMBLE = '''
 import sys, os, json, asyncio, asyncssh, asyncpg, httpx
@@ -117,6 +145,17 @@ async def run_code(code: str, timeout: int = RUNNER_TIMEOUT) -> dict:
     Ruleaza cod Python in subprocess izolat.
     Returneaza: {ok, output, results, error}
     """
+    # Audit C2: log suspicious patterns. Never blocks — agent may legitimately
+    # need shell/filesystem/SSH primitives. The hash links related log lines.
+    matches = _scan_code_security(code)
+    if matches:
+        code_hash = hashlib.sha256(code.encode()).hexdigest()[:8]
+        print(
+            f"[CODE_RUNNER SEC] code_hash={code_hash} len={len(code)} "
+            f"patterns={matches}",
+            flush=True,
+        )
+
     full_code = RUNNER_PREAMBLE + "\n" + code + "\n\n" + \
         "asyncio.run(main()) if 'main' in dir() else None\n" + \
         "import json; print('__RESULTS__' + json.dumps(RESULTS))\n"
