@@ -2,12 +2,50 @@ import os
 import re
 import asyncpg
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, Depends, Header, HTTPException, Request
+from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
 
 load_dotenv(os.path.expanduser("~/.argos/argos-core/config/.env"))
+
+# ─── API key auth (CRITICAL C1 from audit #227) ───────────────────────────────
+ARGOS_API_KEY = os.getenv("ARGOS_API_KEY")
+
+# Paths that bypass auth even when ARGOS_API_KEY is set:
+# - /, /health, /favicon.ico  → public landing + healthcheck (Docker uses /health)
+# - /api/cc/hook              → Claude Code hook; gates itself via approval flow
+# /ui/* is mounted as a sub-app (not a route), so deps don't run there anyway —
+# we still keep the prefix listed for clarity in case the mount ever changes.
+_AUTH_EXEMPT_EXACT = frozenset({"/", "/health", "/favicon.ico", "/api/cc/hook"})
+_AUTH_EXEMPT_PREFIXES = ("/ui/",)
+
+if not ARGOS_API_KEY:
+    print("[STARTUP] WARNING: ARGOS_API_KEY not set — DEV MODE, all endpoints unauthenticated", flush=True)
+else:
+    print(f"[STARTUP] ARGOS_API_KEY configured ({len(ARGOS_API_KEY)} chars) — auth enabled", flush=True)
+
+
+async def require_api_key(
+    request: Request,
+    x_api_key: str = Header(None, alias="X-API-Key"),
+):
+    """API key auth dependency. Returns silently for dev mode (no key set) and
+    for exempt paths. Raises 401 if ARGOS_API_KEY is set and the X-API-Key
+    header is missing or wrong."""
+    path = request.url.path
+    if path in _AUTH_EXEMPT_EXACT:
+        return
+    if any(path.startswith(p) for p in _AUTH_EXEMPT_PREFIXES):
+        return
+    if ARGOS_API_KEY is None:
+        return  # dev mode — already warned at startup
+    if x_api_key != ARGOS_API_KEY:
+        raise HTTPException(status_code=401, detail="Invalid or missing X-API-Key header")
+
+
+_AUTH = [Depends(require_api_key)]
+
 
 pool = None
 system_prompt = None  # core prompt - mereu prezent
@@ -310,25 +348,30 @@ from api.fleet import router as fleet_router
 from api.stream import router as stream_router
 from api.health import router as health_router
 from api.claude_code_api import router as claude_code_router
-app.include_router(chat_router, prefix="/api")
-app.include_router(compress_router, prefix="/api")
-app.include_router(executor_router, prefix="/api")
-app.include_router(vms_router, prefix="/api")
-app.include_router(jobs_router, prefix="/api")
-app.include_router(local_router, prefix="/api")
-app.include_router(backup_router, prefix="/api")
-app.include_router(iso_router, prefix="/api")
-app.include_router(archives_router, prefix="/api")
-app.include_router(nanite_router, prefix="/api")
-app.include_router(dashboard_router, prefix="/api")
-app.include_router(conversations_router, prefix="/api")
-app.include_router(fleet_router, prefix="/api")
-app.include_router(stream_router, prefix="/api")
-app.include_router(health_router, prefix="/api")
-app.include_router(claude_code_router, prefix="/api")
+app.include_router(chat_router, prefix="/api", dependencies=_AUTH)
+app.include_router(compress_router, prefix="/api", dependencies=_AUTH)
+app.include_router(executor_router, prefix="/api", dependencies=_AUTH)
+app.include_router(vms_router, prefix="/api", dependencies=_AUTH)
+app.include_router(jobs_router, prefix="/api", dependencies=_AUTH)
+app.include_router(local_router, prefix="/api", dependencies=_AUTH)
+app.include_router(backup_router, prefix="/api", dependencies=_AUTH)
+app.include_router(iso_router, prefix="/api", dependencies=_AUTH)
+app.include_router(archives_router, prefix="/api", dependencies=_AUTH)
+app.include_router(nanite_router, prefix="/api", dependencies=_AUTH)
+app.include_router(dashboard_router, prefix="/api", dependencies=_AUTH)
+app.include_router(conversations_router, prefix="/api", dependencies=_AUTH)
+app.include_router(fleet_router, prefix="/api", dependencies=_AUTH)
+app.include_router(stream_router, prefix="/api", dependencies=_AUTH)
+app.include_router(health_router, prefix="/api", dependencies=_AUTH)
+app.include_router(claude_code_router, prefix="/api", dependencies=_AUTH)
 
 
 # UI v1 redesign - workflow paralel, nu atinge UI vechi (ruta /)
+
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon():
+    return FileResponse("/home/darkangel/.argos/argos-core/ui/favicon.ico")
+
 app.mount(
     "/ui",
     StaticFiles(directory="/home/darkangel/.argos/argos-core/ui", html=True),
@@ -338,7 +381,7 @@ app.mount(
 
 @app.get("/")
 async def index():
-    return FileResponse("/home/darkangel/.argos/argos-core/ui/index.html")
+    return RedirectResponse(url="/ui/v2/modules/dashboard/index.html")
 
 
 @app.get("/health")
@@ -349,7 +392,7 @@ async def health():
     return {"status": "ok", "db": result, "prompt_modules": modules}
 
 
-@app.get("/api/prompt-modules")
+@app.get("/api/prompt-modules", dependencies=_AUTH)
 async def list_prompt_modules():
     async with pool.acquire() as conn:
         rows = await conn.fetch(
@@ -358,7 +401,7 @@ async def list_prompt_modules():
     return {"modules": [dict(r) for r in rows]}
 
 
-@app.get("/api/system-profiles")
+@app.get("/api/system-profiles", dependencies=_AUTH)
 async def list_system_profiles():
     async with pool.acquire() as conn:
         rows = await conn.fetch(
@@ -376,14 +419,14 @@ async def list_system_profiles():
     return {"profiles": profiles}
 
 
-@app.get("/api/settings/{key}")
+@app.get("/api/settings/{key}", dependencies=_AUTH)
 async def get_setting(key: str):
     async with pool.acquire() as conn:
         row = await conn.fetchrow("SELECT value FROM settings WHERE key = $1", key)
     return {"key": key, "value": row["value"] if row else None}
 
 
-@app.post("/api/settings/{key}")
+@app.post("/api/settings/{key}", dependencies=_AUTH)
 async def set_setting(key: str, value: str):
     async with pool.acquire() as conn:
         await conn.execute(
@@ -393,7 +436,7 @@ async def set_setting(key: str, value: str):
     return {"key": key, "value": value}
 
 
-@app.get("/api/reasoning-mode")
+@app.get("/api/reasoning-mode", dependencies=_AUTH)
 async def get_reasoning_mode():
     async with pool.acquire() as conn:
         mode = await conn.fetchval(
@@ -401,7 +444,7 @@ async def get_reasoning_mode():
         ) or "local"
     return {"mode": mode}
 
-@app.post("/api/reasoning-mode")
+@app.post("/api/reasoning-mode", dependencies=_AUTH)
 async def set_reasoning_mode(data: dict):
     mode = data.get("mode", "local")
     if mode not in ("local", "full"):
@@ -413,7 +456,7 @@ async def set_reasoning_mode(data: dict):
         )
     return {"mode": mode}
 
-@app.get("/api/debug/logs")
+@app.get("/api/debug/logs", dependencies=_AUTH)
 async def get_debug_logs(limit: int = 50, code: str = None, level: str = None):
     async with pool.acquire() as conn:
         if code:
