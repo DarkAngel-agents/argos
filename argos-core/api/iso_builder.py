@@ -20,6 +20,11 @@ ISO_DIR     = os.path.expanduser("~/ISO")
 ARGOS_URL   = "http://11.11.11.111:666"
 NIX_TEMPLATE_DIR = os.path.expanduser("~/argos-iso")
 
+# Concurrency cap on /iso/build. nix-build is heavy (CPU + 4-10 GB disk per
+# run), so we refuse new requests once 3 builds are already in flight rather
+# than queueing them. Audit H13.
+_BUILD_SEMAPHORE = asyncio.Semaphore(3)
+
 # ─── Input validators (audit C4 — Nix expression injection) ───────────────────
 # user / hostname → interpolated raw into Nix attribute names + string literals.
 # Allow only chars that are safe both as Nix identifiers and as POSIX user names.
@@ -590,8 +595,18 @@ async def test_iso(pool, build_id: str, proxmox_server_id: int, proxmox: dict) -
 @router.post("/iso/build")
 @limiter.limit("5/minute")  # audit H4 — nix-build is heavy, disk DoS vector
 async def api_build_iso(request: Request, req: BuildISORequest):
-    from api.main import pool
-    return await build_iso(pool, req)
+    # Audit H13 — cap concurrent builds. Refuse rather than queue so the
+    # caller learns immediately and can retry instead of hanging on a slow
+    # nix-build. Soft cap: a brief race may allow a 4th build to slip in,
+    # but the steady-state limit holds at 3.
+    if _BUILD_SEMAPHORE.locked():
+        raise HTTPException(
+            status_code=429,
+            detail="too many concurrent builds, try again later",
+        )
+    async with _BUILD_SEMAPHORE:
+        from api.main import pool
+        return await build_iso(pool, req)
 
 
 @router.get("/iso/types")
