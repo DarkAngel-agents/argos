@@ -355,12 +355,17 @@ app.add_middleware(
 )
 print(f"[STARTUP] CORS allow_origins={_cors_origins}", flush=True)
 
-# ─── Rate limiting (audit H4) ────────────────────────────────────────────────
+# ─── Rate limiting (audit H4 + N4) ───────────────────────────────────────────
 from api.rate_limit import limiter
 from slowapi.errors import RateLimitExceeded
 from slowapi import _rate_limit_exceeded_handler
+from slowapi.middleware import SlowAPIMiddleware
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+# SlowAPIMiddleware enforces limiter.default_limits at the middleware layer,
+# i.e. BEFORE Depends(require_api_key). Audit N4: failed-auth requests now
+# count against the per-IP cap.
+app.add_middleware(SlowAPIMiddleware)
 
 
 @app.middleware("http")

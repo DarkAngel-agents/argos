@@ -13,4 +13,11 @@ or an X-Forwarded-For aware key_func).
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
-limiter = Limiter(key_func=get_remote_address)
+# Audit N4: default_limits applied globally via SlowAPIMiddleware so they run
+# BEFORE the auth dependency. This catches requests that fail auth and would
+# otherwise consume zero rate-limit budget. Per-route @limiter.limit values
+# layer on top (most restrictive wins per request).
+limiter = Limiter(
+    key_func=get_remote_address,
+    default_limits=["600/minute"],
+)
