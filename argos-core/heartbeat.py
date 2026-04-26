@@ -24,8 +24,9 @@ DB_PORT = int(os.getenv("DB_PORT", 5433))
 DB_USER = os.getenv("DB_USER", "claude")
 DB_PASS = os.getenv("DB_PASSWORD", "")
 DB_NAME = os.getenv("DB_NAME", "claudedb")
-ARGOS_URL = "http://11.11.11.111:666"
-HERMES_URL = "http://11.11.11.98:666"
+# Audit N12: env-overridable URLs (was hardcoded operator-specific IPs).
+ARGOS_URL = os.getenv("ARGOS_URL", "http://localhost:666")
+HERMES_URL = os.getenv("HERMES_URL", "http://localhost:666")
 EMERGENCY_LOG = "/tmp/heartbeat_emergency.log"
 INTERVAL = 2
 PING_INTERVAL = 30
