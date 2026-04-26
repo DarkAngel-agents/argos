@@ -25,3 +25,13 @@ services:
       interval: 10s
       timeout: 5s
       retries: 3
+
+  argos-redis:
+    image: redis:7-alpine
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          memory: 128M
+      restart_policy:
+        condition: any

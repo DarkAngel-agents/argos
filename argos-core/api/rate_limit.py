@@ -20,4 +20,7 @@ from slowapi.util import get_remote_address
 limiter = Limiter(
     key_func=get_remote_address,
     default_limits=["600/minute"],
+    storage_uri="redis://argos-redis:6379",
+    in_memory_fallback_enabled=True,
+    headers_enabled=True,
 )
