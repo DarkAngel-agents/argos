@@ -24,6 +24,25 @@ _ALLOWED_WORKDIR_BASES = tuple(
     ).split(":") if p.strip()
 )
 
+# Filesystem whitelist for the local read_file path (audit #236).
+# Symlinks are resolved before the prefix check, so a symlink in /tmp pointing
+# at /home/darkangel/.ssh is rejected.
+_ALLOWED_READ_BASES = tuple(
+    p.strip().rstrip("/") for p in os.getenv(
+        "ARGOS_READ_BASES",
+        "/home/darkangel:/etc:/var/log:/proc:/sys:/tmp",
+    ).split(":") if p.strip()
+)
+
+# Filesystem whitelist for github_push repo_path (audit #236). Same realpath
+# treatment as reads — symlinks must resolve under one of these bases.
+_ALLOWED_GIT_BASES = tuple(
+    p.strip().rstrip("/") for p in os.getenv(
+        "ARGOS_GIT_BASES",
+        "/home/darkangel/.argos:/home/darkangel/0-mitsoft:/home/darkangel/0-mitsoft-reverseeng",
+    ).split(":") if p.strip()
+)
+
 
 def _validate_path_arg(value, max_len: int) -> bool:
     """Reject anything that isn't a simple POSIX path / git ref. Used by
@@ -45,6 +64,33 @@ def _resolve_workdir(workdir) -> str:
         if abs_path == base or abs_path.startswith(base + "/"):
             return abs_path
     return ""
+
+
+def _resolve_read_path(path) -> str:
+    """Return realpath if `path` is absolute and (after symlink resolution)
+    sits under one of _ALLOWED_READ_BASES. Empty string on rejection.
+    Audit #236 — closes the path-traversal gap in read_file LOCAL."""
+    if not isinstance(path, str) or not path.startswith("/"):
+        return ""
+    real = os.path.realpath(path)
+    for base in _ALLOWED_READ_BASES:
+        if real == base or real.startswith(base + "/"):
+            return real
+    return ""
+
+
+def _resolve_git_path(path) -> str:
+    """Return realpath if `path` is absolute and (after symlink resolution)
+    sits under one of _ALLOWED_GIT_BASES. Empty string on rejection.
+    Audit #236 — closes the directory-escape gap in github_push."""
+    if not isinstance(path, str) or not path.startswith("/"):
+        return ""
+    real = os.path.realpath(path)
+    for base in _ALLOWED_GIT_BASES:
+        if real == base or real.startswith(base + "/"):
+            return real
+    return ""
+
 
 router = APIRouter()
 
@@ -976,14 +1022,26 @@ async def _execute_tool(name: str, inputs: dict, pool=None) -> dict:
             }
         # Local read — use Python open() directly, no shell at all.
         if machine in {"beasty", "127.0.0.1", "localhost", ""}:
+            # Audit #236: filesystem whitelist with realpath-based symlink
+            # resolution — blocks path traversal AND symlink-to-secret tricks.
+            resolved = _resolve_read_path(path)
+            if not resolved:
+                return {
+                    "stdout": "",
+                    "stderr": (
+                        f"[SEC N1] path outside allowed bases "
+                        f"{list(_ALLOWED_READ_BASES)}"
+                    ),
+                    "returncode": 1,
+                }
             try:
-                with open(path, "r", encoding="utf-8", errors="replace") as f:
+                with open(resolved, "r", encoding="utf-8", errors="replace") as f:
                     content = f.read(1_000_000)  # cap at 1 MB
                 return {"stdout": content, "stderr": "", "returncode": 0}
             except FileNotFoundError:
-                return {"stdout": "", "stderr": f"file not found: {path}", "returncode": 1}
+                return {"stdout": "", "stderr": f"file not found: {resolved}", "returncode": 1}
             except PermissionError:
-                return {"stdout": "", "stderr": f"permission denied: {path}", "returncode": 1}
+                return {"stdout": "", "stderr": f"permission denied: {resolved}", "returncode": 1}
             except Exception as e:
                 return {"stdout": "", "stderr": f"read failed: {type(e).__name__}: {e}", "returncode": 1}
         # Remote — path was already validated; shlex.quote is defense in depth.
@@ -1005,6 +1063,19 @@ async def _execute_tool(name: str, inputs: dict, pool=None) -> dict:
         if not isinstance(commit_message, str) or not commit_message:
             return {"returncode": 1, "stdout": "", "stderr": "commit_message required"}
 
+        # Audit #236: filesystem whitelist with realpath. Without this, the
+        # caller could `cd /etc` (passes regex) and run git ops there.
+        resolved_repo = _resolve_git_path(repo_path)
+        if not resolved_repo:
+            return {
+                "returncode": 1,
+                "stdout": "",
+                "stderr": (
+                    f"[SEC N3] repo_path outside allowed bases "
+                    f"{list(_ALLOWED_GIT_BASES)}"
+                ),
+            }
+
         # Audit N3: deliver commit message via -F <file> so its content is
         # never on the command line. base64-encode for the write step so the
         # echo command itself is safe regardless of message content.
@@ -1020,7 +1091,7 @@ async def _execute_tool(name: str, inputs: dict, pool=None) -> dict:
             return {"returncode": 1, "stdout": "",
                     "stderr": f"failed to write commit message: {write.get('stderr', '')}"}
 
-        rp = shlex.quote(repo_path)
+        rp = shlex.quote(resolved_repo)
         br = shlex.quote(branch)
         commands = [
             f"cd {rp} && git add -A",
