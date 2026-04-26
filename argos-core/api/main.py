@@ -453,6 +453,12 @@ async def list_prompt_modules():
     return {"modules": [dict(r) for r in rows]}
 
 
+# Audit N26: explicit safe-column whitelist for system_credentials. Same
+# policy as mcp_servers/argos_db_mcp/server.py: never project `value` /
+# `password` / `secret` columns regardless of what the SELECT requests.
+_SYSTEM_CRED_SAFE_COLS = frozenset({"credential_type", "label", "username", "value_hint"})
+
+
 @app.get("/api/system-profiles", dependencies=_AUTH)
 async def list_system_profiles():
     async with pool.acquire() as conn:
@@ -466,7 +472,12 @@ async def list_system_profiles():
                 "SELECT credential_type, label, username, value_hint FROM system_credentials WHERE system_id = $1 AND active = TRUE",
                 r["id"]
             )
-            p["credentials"] = [dict(c) for c in creds]
+            # Defensive filter: drop any column not on the safe-list, in case
+            # the SELECT above is ever broadened by accident or DB schema drift.
+            p["credentials"] = [
+                {k: v for k, v in dict(c).items() if k in _SYSTEM_CRED_SAFE_COLS}
+                for c in creds
+            ]
             profiles.append(p)
     return {"profiles": profiles}
 
