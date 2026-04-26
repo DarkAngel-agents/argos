@@ -2,6 +2,7 @@
 ISO Builder - construieste, testeaza si gestioneaza ISO-uri NixOS
 """
 import os
+import re
 import json
 import secrets
 import asyncio
@@ -17,6 +18,48 @@ SSH_KEY     = os.path.expanduser("~/.ssh/id_ed25519")
 ISO_DIR     = os.path.expanduser("~/ISO")
 ARGOS_URL   = "http://11.11.11.111:666"
 NIX_TEMPLATE_DIR = os.path.expanduser("~/argos-iso")
+
+# ─── Input validators (audit C4 — Nix expression injection) ───────────────────
+# user / hostname → interpolated raw into Nix attribute names + string literals.
+# Allow only chars that are safe both as Nix identifiers and as POSIX user names.
+_NAME_RE = re.compile(r"^[A-Za-z0-9_-]+$")
+# extra_packages → joined into `environment.systemPackages = [ ... ]`. Each entry
+# must look like a real Nix attribute path (alphanumeric, underscore, dash, dot).
+_NIX_PKG_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
+
+
+def _validate_iso_params(params: dict) -> None:
+    """Reject params that could break out of the Nix config template."""
+    user = params.get("user")
+    if user is not None:
+        if not isinstance(user, str) or len(user) > 64 or not _NAME_RE.match(user):
+            raise HTTPException(
+                status_code=400,
+                detail="invalid user: must match [A-Za-z0-9_-]+, max 64 chars",
+            )
+
+    hostname = params.get("hostname")
+    if hostname is not None:
+        if not isinstance(hostname, str) or len(hostname) > 64 or not _NAME_RE.match(hostname):
+            raise HTTPException(
+                status_code=400,
+                detail="invalid hostname: must match [A-Za-z0-9_-]+, max 64 chars",
+            )
+
+    extra = params.get("extra_packages", [])
+    if extra:
+        if not isinstance(extra, list):
+            raise HTTPException(
+                status_code=400,
+                detail="invalid extra_packages: must be a list of strings",
+            )
+        for pkg in extra:
+            if not isinstance(pkg, str) or not _NIX_PKG_RE.match(pkg):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"invalid package name {pkg!r}: must match [A-Za-z0-9_.-]+",
+                )
+
 
 # ── Modele ────────────────────────────────────────────────────────────────────
 
@@ -287,6 +330,7 @@ async def build_iso(pool, req: BuildISORequest) -> dict:
     # Merge params cu default
     default_params = iso_type["default_params"] or {}
     params = {**default_params, **req.params}
+    _validate_iso_params(params)  # audit C4 — blocks Nix injection
 
     # Creeaza inregistrarea in DB
     async with pool.acquire() as conn:

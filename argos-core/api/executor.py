@@ -31,6 +31,26 @@ TIMEOUT_INSTALL = 600   # nixos-install, nix-build
 TIMEOUT_REBUILD = 300   # nixos-rebuild
 
 
+# ─── Input validators (audit C3) ──────────────────────────────────────────────
+# Whitelist of characters allowed in a backup filename used by /api/nixos-restore.
+# No slashes, no spaces, no shell metacharacters → blocks both shell injection
+# and path traversal in the remote `cat {BACKUP_DIR}/{filename}` interpolation.
+_FILENAME_RE = re.compile(r"^[A-Za-z0-9._-]+$")
+
+
+def _validate_filename(name: str) -> None:
+    """Reject anything that isn't a simple filename. Raises HTTP 400."""
+    if not isinstance(name, str) or not name:
+        raise HTTPException(status_code=400, detail="filename is required")
+    if len(name) > 255:
+        raise HTTPException(status_code=400, detail="filename too long (max 255 chars)")
+    if not _FILENAME_RE.match(name):
+        raise HTTPException(
+            status_code=400,
+            detail="filename must match [A-Za-z0-9._-]+ (no slashes, no shell metachars)",
+        )
+
+
 def _get_timeout(command: str) -> int:
     cmd = command.lower()
     if any(x in cmd for x in ["nixos-install", "nix-build", "nix-channel --update"]):
@@ -122,6 +142,7 @@ async def list_backups():
 
 @router.post("/nixos-restore")
 async def restore_backup(req: RestoreRequest):
+    _validate_filename(req.filename)  # audit C3 — blocks shell injection
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     pre_restore_backup = f"beasty-pre-restore-{timestamp}.nix"
 
