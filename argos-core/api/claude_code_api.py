@@ -437,7 +437,8 @@ async def get_approval_status(approval_id: int):
 
 
 @router.post("/claude-code/approval/{approval_id}/decide")
-async def decide_approval(approval_id: int, req: ApprovalDecision):
+@limiter.limit("60/minute")  # audit N27 — flips approval state, cap per IP
+async def decide_approval(request: Request, approval_id: int, req: ApprovalDecision):
     """Decide o aprobare pending: approved sau denied (+ reason opt)."""
     from api.main import pool
 

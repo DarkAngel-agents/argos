@@ -1,9 +1,10 @@
 import json
 import asyncio
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime
+from api.rate_limit import limiter
 
 router = APIRouter()
 
@@ -147,7 +148,8 @@ async def list_pending_auth():
 
 
 @router.post("/authorizations/{auth_id}/decide")
-async def decide_auth(auth_id: int, req: AuthDecision):
+@limiter.limit("60/minute")  # audit N27 — flips auth state, cap per IP
+async def decide_auth(request: Request, auth_id: int, req: AuthDecision):
     from api.main import pool
 
     if req.decision not in ["approved", "denied"]:
@@ -182,7 +184,8 @@ async def decide_auth(auth_id: int, req: AuthDecision):
 
 
 @router.post("/jobs/{job_id}/execute")
-async def execute_job(job_id: int):
+@limiter.limit("30/minute")  # audit N27 — runs queued multi-step commands
+async def execute_job(request: Request, job_id: int):
     """Executa un job aprobat pas cu pas"""
     from api.main import pool
     from api.executor import _exec_ssh_by_name

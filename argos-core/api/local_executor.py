@@ -1,8 +1,9 @@
 import json
 import httpx
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from typing import List, Optional
+from api.rate_limit import limiter
 
 router = APIRouter()
 
@@ -17,7 +18,8 @@ class LocalTask(BaseModel):
 
 
 @router.post("/local-exec")
-async def local_exec(req: LocalTask):
+@limiter.limit("30/minute")  # audit N27 — multi-step SSH exec, cap floods
+async def local_exec(request: Request, req: LocalTask):
     from api.executor import _exec_ssh_by_name
     results = []
     for i, step in enumerate(req.steps):

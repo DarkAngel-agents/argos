@@ -2,11 +2,12 @@ import os
 import re
 import asyncio
 import asyncssh
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime
 from api.ssh_util import known_hosts as _ssh_known_hosts
+from api.rate_limit import limiter
 
 router = APIRouter()
 
@@ -92,7 +93,8 @@ class RestoreRequest(BaseModel):
 
 
 @router.post("/exec")
-async def execute_command(req: ExecRequest):
+@limiter.limit("60/minute")  # audit N27 — RCE-capable, cap at 1/sec per IP
+async def execute_command(request: Request, req: ExecRequest):
     machine = req.machine.lower()
     is_ip = bool(re.match(r'^\d+\.\d+\.\d+\.\d+$', machine))
     if machine not in KNOWN_HOSTS and machine not in LOCAL_MACHINES and not is_ip:
@@ -109,7 +111,8 @@ async def execute_command(req: ExecRequest):
 
 
 @router.post("/nixos-rebuild")
-async def nixos_rebuild(req: NixosRebuildRequest):
+@limiter.limit("5/minute")  # audit N27 — heavy + reboot risk
+async def nixos_rebuild(request: Request, req: NixosRebuildRequest):
     results = []
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     backup_name = f"beasty-{timestamp}.nix"
@@ -157,7 +160,8 @@ async def list_backups():
 
 
 @router.post("/nixos-restore")
-async def restore_backup(req: RestoreRequest):
+@limiter.limit("5/minute")  # audit N27 — same blast radius as rebuild
+async def restore_backup(request: Request, req: RestoreRequest):
     _validate_filename(req.filename)  # audit C3 — blocks shell injection
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     pre_restore_backup = f"beasty-pre-restore-{timestamp}.nix"
