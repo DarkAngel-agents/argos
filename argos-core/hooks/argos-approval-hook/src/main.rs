@@ -408,6 +408,14 @@ fn main() -> ExitCode {
     match poll_status(&agent, approval_id, max_wait) {
         Decision::Approved => {
             debug_log(&format!("APPROVED approval_id={}", approval_id));
+            let out = serde_json::json!({
+                "hookSpecificOutput": {
+                    "hookEventName": &input.hook_event_name,
+                    "permissionDecision": "allow",
+                    "permissionDecisionReason": format!("argos approved auth_id={}", approval_id)
+                }
+            });
+            println!("{}", out);
             ExitCode::from(0)
         }
         Decision::Denied(reason) => {
