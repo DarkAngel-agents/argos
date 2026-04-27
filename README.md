@@ -23,6 +23,28 @@ If parts of the documentation feel AI-written, that's because they are. I'm not 
 
 The current public version is the codebase without my personal skills and without the memory ARGOS has built up around my infrastructure. As-is, it would be impossible for me to operate it at the level where I can keep adding new functional features. The next milestone is finishing the autonomous reverse-engineering layer — once that lands, the public version becomes self-sufficient enough that someone else could actually use it. Targeting roughly one month from now.
 
+## Screenshots
+
+![Dashboard](docs/screenshots/01-dashboard.png)
+*Dashboard — overview with active sessions, fleet status, jobs, chats, health.*
+
+![Approvals](docs/screenshots/02-approvals.png)
+*Approvals — gating shell access through risk-rated approval flow with audit trail.*
+
+![Jobs](docs/screenshots/03-jobs.png)
+*Jobs — running, waiting, completed work tracked across the cluster.*
+
+![Health](docs/screenshots/04-health.png)
+*Health — per-node service heartbeat with cpu/mem/db latency.*
+
+![Chat](docs/screenshots/05-chat.png)
+*Chat — conversations with the agent, multi-session, archived state.*
+
+![Settings](docs/screenshots/06-settings.png)
+*Settings — LLM providers, reasoning mode, prompt modules, language config.*
+
+---
+
 ## Status
 
 This is a **public alpha**. Be honest about what that means:
